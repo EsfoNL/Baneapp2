@@ -21,10 +21,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.*
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
@@ -66,7 +63,25 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun Chat(navController: NavController, /*TODO(MORE)*/) {
+        val contactName: String = "Test"
 
+        Scaffold(topBar = {
+            TopAppBar(title = {
+                Text(text = contactName)
+            })
+        }) {
+            Column(
+                modifier = Modifier.padding(it).fillMaxSize()
+
+            ) {
+                var value by remember { mutableStateOf("")}
+                TextField(
+                    value= value,
+                    onValueChange = {value = it}
+                )
+
+            }
+        }
     }
 
     @Composable
