@@ -6,8 +6,18 @@ import kotlinx.parcelize.Parcelize
 import org.json.JSONObject
 
 @Parcelize
-data class UserInfo(
-    val token: String,
+data class User(
+    var token: String?,
+    var name: String,
+    var num: String,
+    var id: String,
+    var refresh_token: String?
+    ) : Parcelable {
+        constructor() : this(null, "", "", "", null)
+    }
+
+@Parcelize
+data class Person(
     val name: String,
-    val num: String,
-    val refresh_token: String) : Parcelable
+    val num: String
+) : Parcelable

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
@@ -32,29 +33,32 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.baneapp2.ui.theme.Baneapp2Theme
+import okhttp3.OkHttpClient
+import okhttp3.WebSocket
 
 class MainActivity : ComponentActivity() {
 
-    var userInfo: UserInfo? = null;
 
-
+    val okHttpClient = OkHttpClient()
+    var websocket: WebSocket? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (savedInstanceState != null) {
-            userInfo = savedInstanceState.getParcelable("main")
-        }
         setContent {
+            var userInfo by rememberSaveable { mutableStateOf(User()) }
+            var messages: MutableMap<String, MutableList<String>> by rememberSaveable{ mutableMapOf() }
+            var persons: MutableMap<String, Person> by rememberSaveable{ mutableMapOf() }
             val navController = rememberNavController()
             Baneapp2Theme(colors = darkColors()) {
                 // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background
                 ) {
-                    NavHost(navController = navController, startDestination = if (userInfo != null) "Main" else "Login") {
+                    NavHost(navController = navController, startDestination = if (userInfo.token != null) "Main" else "Login") {
                         composable("Login") { Login(navController) }
                         composable("Register") { Register(navController) }
-                        composable("Main") { Main(navController)}
+                        composable("Main") { Main(navController, userInfo, messages, persons)}
+                        composable("Chat") { Chat(navController, /*TODO(More?)*/) }
                     }
                 }
             }
@@ -62,14 +66,24 @@ class MainActivity : ComponentActivity() {
     }
 
 
-    override fun onPause() {
-        super.onPause()
+    @Composable
+    fun Chat(navController: NavController, /*TODO(MORE)*/) {
 
     }
 
     @Composable
-    fun Main(navController: NavController) {
+    fun Main(navController: NavController, userInfo: User, messages: MutableMap<String, MutableList<String>>, persons: MutableMap<String, Person>) {
+        if (connectWebSocket(userInfo)) {
 
+        }
+    }
+
+    fun connectWebSocket(userInfo: User): Boolean {
+        if (userInfo.token != null) {
+            return true
+        } else {
+            return false
+        }
     }
 
     @Composable
