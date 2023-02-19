@@ -1,10 +1,8 @@
 package com.example.baneapp2
 
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActionScope
@@ -45,16 +43,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            var userInfo by rememberSaveable { mutableStateOf(User()) }
-            var messages: MutableMap<String, MutableList<String>> by rememberSaveable{ mutableMapOf() }
-            var persons: MutableMap<String, Person> by rememberSaveable{ mutableMapOf() }
+            val userInfo = rememberSaveable { mutableStateOf(User()) }
+            val messages: MutableMap<String, MutableList<String>> = rememberSaveable{ mutableMapOf() }
+            val persons: MutableMap<String, Person> = rememberSaveable{ mutableMapOf() }
             val navController = rememberNavController()
             Baneapp2Theme(colors = darkColors()) {
                 // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background
                 ) {
-                    NavHost(navController = navController, startDestination = if (userInfo.token != null) "Main" else "Login") {
+                    NavHost(navController = navController, startDestination = if (userInfo.value.token != null) "Main" else "Login") {
                         composable("Login") { Login(navController) }
                         composable("Register") { Register(navController) }
                         composable("Main") { Main(navController, userInfo, messages, persons)}
@@ -72,14 +70,14 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun Main(navController: NavController, userInfo: User, messages: MutableMap<String, MutableList<String>>, persons: MutableMap<String, Person>) {
+    fun Main(navController: NavController, userInfo: MutableState<User>, messages: MutableMap<String, MutableList<String>>, persons: MutableMap<String, Person>) {
         if (connectWebSocket(userInfo)) {
 
         }
     }
 
-    fun connectWebSocket(userInfo: User): Boolean {
-        if (userInfo.token != null) {
+    fun connectWebSocket(userInfo: MutableState<User>): Boolean {
+        if (userInfo.value.token != null) {
             return true
         } else {
             return false
