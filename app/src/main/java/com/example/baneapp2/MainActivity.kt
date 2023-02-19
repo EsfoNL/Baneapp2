@@ -1,10 +1,13 @@
 package com.example.baneapp2
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardActionScope
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.*
@@ -19,6 +22,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -30,14 +34,16 @@ import androidx.navigation.compose.rememberNavController
 import com.example.baneapp2.ui.theme.Baneapp2Theme
 
 class MainActivity : ComponentActivity() {
+
+    var userInfo: UserInfo? = null;
+
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setThemedContent()
-    }
-
-
-
-    fun setThemedContent() {
+        if (savedInstanceState != null) {
+            userInfo = savedInstanceState.getParcelable("main")
+        }
         setContent {
             val navController = rememberNavController()
             Baneapp2Theme(colors = darkColors()) {
@@ -45,13 +51,25 @@ class MainActivity : ComponentActivity() {
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background
                 ) {
-                    NavHost(navController = navController, startDestination = "Login") {
+                    NavHost(navController = navController, startDestination = if (userInfo != null) "Main" else "Login") {
                         composable("Login") { Login(navController) }
                         composable("Register") { Register(navController) }
+                        composable("Main") { Main(navController)}
                     }
                 }
             }
         }
+    }
+
+
+    override fun onPause() {
+        super.onPause()
+
+    }
+
+    @Composable
+    fun Main(navController: NavController) {
+
     }
 
     @Composable
@@ -59,7 +77,6 @@ class MainActivity : ComponentActivity() {
         val focusManager = LocalFocusManager.current
         var email by remember { mutableStateOf("") }
         var password by remember { mutableStateOf("") }
-        var visible by remember { mutableStateOf(false) }
         Scaffold(topBar = {
             TopAppBar(title = {
                 Text(text = "Login")
@@ -73,7 +90,7 @@ class MainActivity : ComponentActivity() {
                     painterResource(R.drawable.bane_logo),
                     "Logo",
                     modifier = Modifier.align(Alignment.CenterHorizontally),
-                    )
+                )
                 SingleLineInput(
                     email,
                     { email = it },
@@ -87,13 +104,21 @@ class MainActivity : ComponentActivity() {
                     password,
                     { password = it },
                     modifier = Modifier.align(Alignment.CenterHorizontally),
-                    keyboardActions = KeyboardActions(onNext = {
-                        focusManager.moveFocus(FocusDirection.Down)
-                    })
+                    onDone = {
+                        if (login(email, password)) {
+                            navController.navigate("Main")
+                        } else {
+
+                        }
+                    }
                 )
                 Button(
                     onClick = {
+                        if (login(email, password)) {
+                            navController.navigate("Main")
+                        } else {
 
+                        }
                     },
                     modifier = Modifier.align(Alignment.CenterHorizontally).size(
                         width = TextFieldDefaults.MinWidth,
@@ -117,6 +142,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    fun login(email: String, password: String): Boolean {
+        return true
+    }
 
     @Composable
     fun Register(navController: NavController) {
@@ -124,7 +152,6 @@ class MainActivity : ComponentActivity() {
         var email by remember { mutableStateOf("") }
         var password by remember { mutableStateOf("") }
         var name by remember { mutableStateOf("") }
-        var visible by remember { mutableStateOf(false) }
         Scaffold(topBar = {
             TopAppBar(
                 navigationIcon = {
@@ -169,9 +196,7 @@ class MainActivity : ComponentActivity() {
                     password,
                     { password = it },
                     modifier = Modifier.align(Alignment.CenterHorizontally),
-                    keyboardActions = KeyboardActions(onNext = {
-                        focusManager.moveFocus(FocusDirection.Down)
-                    })
+
                 )
 
                 Button(
@@ -195,6 +220,7 @@ fun SingleLineInput(
     modifier: Modifier = Modifier,
     label: String = "Input",
     keyboardActions: KeyboardActions = KeyboardActions(),
+    keyboardOptions: KeyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
 ) {
     TextField(
         value = value,
@@ -203,7 +229,8 @@ fun SingleLineInput(
         singleLine = true,
         placeholder = { Text(label) },
         modifier = modifier.focusTarget(),
-        keyboardActions = keyboardActions
+        keyboardActions = keyboardActions,
+        keyboardOptions = keyboardOptions
     )
 }
 
@@ -213,7 +240,7 @@ fun PasswordField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     label: String = "Password",
-    keyboardActions: KeyboardActions = KeyboardActions(),
+    onDone: KeyboardActionScope.() -> Unit = {}
 ) {
     var visible by remember { mutableStateOf(false) }
     TextField(
@@ -234,8 +261,8 @@ fun PasswordField(
                 )
             }
         },
-        modifier = modifier.focusTarget(),
-        keyboardActions = keyboardActions
+        modifier = modifier,
+        keyboardActions = KeyboardActions(onDone = onDone),
     )
 }
 
