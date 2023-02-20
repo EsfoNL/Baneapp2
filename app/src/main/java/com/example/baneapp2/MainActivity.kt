@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -24,11 +25,14 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -75,15 +79,33 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun Chat(navController: NavController, person: Person, messages: MutableList<Message>) {
-        val contactName: String = "Test"
+        var contactNaam: String = person.toString()
+        val MessageModifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF373737))
+            .padding(10.dp)
+        val textModifier = TextStyle(fontSize = 20.sp, color = Color(0xFFA7A7A7))
+        val pfp: Painter = painterResource(R.drawable.subpicture)
+        val tijd: String = "4:20"
+
 
         Scaffold(topBar = {
-            TopAppBar(title = {
-                Text(text = contactName)
-            })
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = {
+                        navController.navigateUp()
+                    }) {
+                        Icon(Icons.Filled.ArrowBack, "Back to Contacts")
+                    }
+                },
+                title = {
+                    Text(text = contactNaam)
+                })
         }) {
             Column(
-                modifier = Modifier.padding(it).fillMaxSize()
+                modifier = Modifier
+                    .padding(it)
+                    .fillMaxSize()
 
             ) {
                 var value by remember { mutableStateOf("")}
@@ -92,12 +114,15 @@ class MainActivity : ComponentActivity() {
                     onValueChange = {value = it},
                     colors = TextFieldDefaults.textFieldColors(
                         backgroundColor = MaterialTheme.colors.background,
-
                         textColor = MaterialTheme.colors.background
                     )
                 )
+                LazyColumn(modifier = MessageModifier) {
+                    items(messages.count()) {Message ->
+                        MessageCard(messages[Message]!!.message, "Motherfricker", pfp, tijd)
 
-
+                    }
+                }
             }
         }
     }
@@ -119,6 +144,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
 
     fun connectWebSocket(userInfo: MutableState<User>): Boolean {
         val token = userInfo.value.token
@@ -143,7 +169,9 @@ class MainActivity : ComponentActivity() {
             })
         }) {
             Column(
-                modifier = Modifier.padding(it).fillMaxSize(),
+                modifier = Modifier
+                    .padding(it)
+                    .fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Image(
@@ -180,10 +208,12 @@ class MainActivity : ComponentActivity() {
 
                         }
                     },
-                    modifier = Modifier.align(Alignment.CenterHorizontally).size(
-                        width = TextFieldDefaults.MinWidth,
-                        height = TextFieldDefaults.MinHeight
-                    )
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .size(
+                            width = TextFieldDefaults.MinWidth,
+                            height = TextFieldDefaults.MinHeight
+                        )
                 ) {
                     Text("Login", style = MaterialTheme.typography.h5)
                 }
@@ -191,10 +221,12 @@ class MainActivity : ComponentActivity() {
                     onClick = {
                         navController.navigate("Register")
                     },
-                    modifier = Modifier.align(Alignment.CenterHorizontally).size(
-                        width = TextFieldDefaults.MinWidth,
-                        height = TextFieldDefaults.MinHeight
-                    )
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .size(
+                            width = TextFieldDefaults.MinWidth,
+                            height = TextFieldDefaults.MinHeight
+                        )
                 ) {
                     Text("Register", style = MaterialTheme.typography.h5)
                 }
@@ -226,7 +258,9 @@ class MainActivity : ComponentActivity() {
                 })
         }) {
             Column(
-                modifier = Modifier.padding(it).fillMaxSize(),
+                modifier = Modifier
+                    .padding(it)
+                    .fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Image(
@@ -264,8 +298,10 @@ class MainActivity : ComponentActivity() {
 
                     },
                     content = { Text("Register", style = MaterialTheme.typography.h5) },
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                        .width(TextFieldDefaults.MinWidth).height(TextFieldDefaults.MinHeight)
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .width(TextFieldDefaults.MinWidth)
+                        .height(TextFieldDefaults.MinHeight)
                 )
             }
         }
@@ -329,9 +365,14 @@ fun PasswordField(
 @Preview
 @Composable
 fun ChatItemPreview() {
+    val messagelijsttest = mutableListOf<String> ( "Message", "Bericht 2000", "ik verveel me", "help")
     Baneapp2Theme {
-        ChatItem()
+        //MessageCard("Dit is een testbericht OwO", "Username", painterResource(R.drawable.subpicture), "4:23")
+
     }
+
+
+
 }
 
 @OptIn(ExperimentalMaterialApi::class)
@@ -345,3 +386,98 @@ fun ChatItem(icon: Painter = painterResource(R.drawable.bane_logo), name: String
         }
     }
 }
+@Composable
+fun MessageCard(message: String, name: String,  pfp: Painter , tijd: String) {
+    Card(
+        modifier = Modifier
+            .padding(10.dp)
+            .fillMaxWidth()
+            .wrapContentHeight(),
+        shape = MaterialTheme.shapes.medium,
+        elevation = 5.dp,
+        backgroundColor = Color(0xFF373737)
+    ) {
+        Column(Modifier.padding(8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Image(
+                    pfp,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(80.dp)
+                        .padding(8.dp),
+                    contentScale = ContentScale.Fit,
+                )
+                Row(Modifier.padding(8.dp)) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.h4,
+
+                    )
+                    Text(
+                        text = tijd,
+                        style = MaterialTheme.typography.body2,
+                    )
+                }
+
+            }
+            Text(
+                text = message,
+                style = MaterialTheme.typography.body1,
+                modifier = Modifier.padding(8.dp)
+            )
+        }
+    }
+}
+@Composable
+fun Chat(/*navController: NavController, person: Person*/ messages: MutableList<Message>) {
+    //var contactNaam: String = person.toString()
+    val MessageModifier = Modifier
+        .fillMaxSize()
+        .background(Color(0xFF373737))
+        .padding(10.dp)
+    val textModifier = TextStyle(fontSize = 20.sp, color = Color(0xFFA7A7A7))
+    val pfp: Painter = painterResource(R.drawable.subpicture)
+    val tijd: String = "4:20"
+
+
+    Scaffold(topBar = {
+        TopAppBar(
+            navigationIcon = {
+                IconButton(onClick = {
+                    //navController.navigateUp()
+                }) {
+                    Icon(Icons.Filled.ArrowBack, "Back to Contacts")
+                }
+            },
+            title = {
+                Text(text = "contactNaam")
+            })
+    }) {
+        Column(
+            modifier = Modifier
+                .padding(it)
+                .fillMaxSize()
+
+        ) {
+            var value by remember { mutableStateOf("")}
+            TextField(
+                value= value,
+                onValueChange = {value = it},
+                colors = TextFieldDefaults.textFieldColors(
+                    backgroundColor = MaterialTheme.colors.background,
+                    textColor = MaterialTheme.colors.background
+                )
+            )
+            LazyColumn(modifier = MessageModifier) {
+                items(messages.count()) {Message ->
+                    MessageCard(messages[Message]!!.message, "Motherfricker", pfp, tijd)
+
+                }
+            }
+        }
+    }
+}
+
+
