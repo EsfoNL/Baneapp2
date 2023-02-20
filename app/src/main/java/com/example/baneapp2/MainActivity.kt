@@ -14,10 +14,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -102,8 +99,10 @@ class MainActivity : ComponentActivity() {
             .background(Color(0xFF373737))
             .padding(10.dp)
         val textModifier = TextStyle(fontSize = 20.sp, color = Color(0xFFA7A7A7))
-        val pfp: Painter = painterResource(R.drawable.subpicture)
-        val tijd: String = "4:20"
+        var pfp: Painter
+        var eigenNaam: String = "Maurice"
+        var naam: String
+        var tijd: String
 
 
         Scaffold(topBar = {
@@ -119,7 +118,22 @@ class MainActivity : ComponentActivity() {
                     Text(text = contactNaam)
                 })
         }) {
-            Column(
+            LazyColumn(modifier = MessageModifier) {
+                items(messages.count()) {Message ->
+                    if(messages[Message].self) {
+                        pfp = painterResource(R.drawable.subpicture)
+                        naam = eigenNaam
+                    }
+                    else {
+                        pfp = painterResource(R.drawable.subpictureother)
+                        naam = contactNaam
+                    }
+                    var tijddatum = messages[Message].time.getTime()
+                    tijd = tijddatum.hours.toString() + ":" + tijddatum.minutes.toString()
+                    MessageCard(messages[Message].message, naam, pfp, tijd)
+                }
+            }
+            Row(
                 modifier = Modifier
                     .padding(it)
                     .fillMaxSize()
@@ -130,16 +144,14 @@ class MainActivity : ComponentActivity() {
                     value= value,
                     onValueChange = {value = it},
                     colors = TextFieldDefaults.textFieldColors(
-                        backgroundColor = MaterialTheme.colors.background,
+                        backgroundColor = Color(0xFF373737),
                         textColor = MaterialTheme.colors.background
                     )
                 )
-                LazyColumn(modifier = MessageModifier) {
-                    items(messages.count()) {Message ->
-                        MessageCard(messages[Message]!!.message, "Motherfricker", pfp, tijd)
-
-                    }
+                IconButton(onClick = { /*TODO*/ }) {
+                    Icon(Icons.Filled.Send, contentDescription = "Send")
                 }
+
             }
         }
     }
@@ -405,12 +417,12 @@ fun PasswordField(
 @Preview
 @Composable
 fun ChatItemPreview() {
-    var messagelijsttest = mutableListOf<Message> (Message("hello", true, "woef", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()))
+    //var messagelijsttest = mutableListOf<Message> (Message("hello", true, "woef", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()))
     //var testuserinfo = mutableStateOf<>(useri)
 
     Baneapp2Theme {
         //MessageCard("Dit is een testbericht OwO", "Username", painterResource(R.drawable.subpicture), "4:23")
-        chatu(messagelijsttest)
+        //chatu(messagelijsttest)
     }
 
 
@@ -472,7 +484,7 @@ fun MessageCard(message: String, name: String,  pfp: Painter , tijd: String) {
         }
     }
 }
-@Composable
+/*@Composable
 fun chatu(/*navController: NavController, person: Person*/ messages: MutableList<Message>) {
     //var contactNaam: String = person.toString()
     val MessageModifier = Modifier
@@ -498,9 +510,25 @@ fun chatu(/*navController: NavController, person: Person*/ messages: MutableList
             },
             title = {
                 Text(text = "contactNaam")
-            })
+            },
+        )
     }) {
-        Column(
+        LazyColumn(modifier = MessageModifier) {
+            items(messages.count()) {Message ->
+                if(messages[Message].self) {
+                    pfp = painterResource(R.drawable.subpicture)
+                    naam = eigenNaam
+                }
+                else {
+                    pfp = painterResource(R.drawable.subpictureother)
+                    naam = contactNaam
+                }
+                    var tijddatum = messages[Message].time.getTime()
+                    tijd = tijddatum.hours.toString() + ":" + tijddatum.minutes.toString()
+                    MessageCard(messages[Message].message, naam, pfp, tijd)
+                }
+            }
+        Row(
             modifier = Modifier
                 .padding(it)
                 .fillMaxSize()
@@ -511,27 +539,16 @@ fun chatu(/*navController: NavController, person: Person*/ messages: MutableList
                 value= value,
                 onValueChange = {value = it},
                 colors = TextFieldDefaults.textFieldColors(
-                    backgroundColor = MaterialTheme.colors.background,
+                    backgroundColor = Color(0xFF373737),
                     textColor = MaterialTheme.colors.background
                 )
             )
-            LazyColumn(modifier = MessageModifier) {
-                items(messages.count()) {Message ->
-                    if(messages[Message].self) {
-                        pfp = painterResource(R.drawable.subpicture)
-                        naam = eigenNaam
-                    }
-                    else {
-                        pfp = painterResource(R.drawable.subpictureother)
-                        naam = contactNaam
-                    }
-                    var tijddatum = messages[Message].time.getTime()
-                    tijd = tijddatum.hours.toString() + ":" + tijddatum.minutes.toString()
-                    MessageCard(messages[Message].message, naam, pfp, tijd)
-                }
+            IconButton(onClick = { /*TODO*/ }) {
+                Icon(Icons.Filled.Send, contentDescription = "Send")
             }
+
         }
     }
-}
+}*/
 
 
