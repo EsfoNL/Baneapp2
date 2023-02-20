@@ -81,6 +81,7 @@ class MainActivity : ComponentActivity() {
                     onValueChange = {value = it},
                     colors = TextFieldDefaults.textFieldColors(
                         backgroundColor = MaterialTheme.colors.background,
+
                         textColor = MaterialTheme.colors.background
                     )
                 )
