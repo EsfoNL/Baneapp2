@@ -110,7 +110,7 @@ class MainActivity : ComponentActivity() {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = {
-                        navController.navigateUp()
+                        //navController.navigateUp()
                     }) {
                         Icon(Icons.Filled.ArrowBack, "Back to Contacts")
                     }
@@ -151,7 +151,7 @@ class MainActivity : ComponentActivity() {
                    LaunchedEffect(dataBase.personDao().count(), dataBase.personDao().personsRecently()) {
                        val count = dataBase.personDao().count().last()
                        val recent_persons = dataBase.personDao().personsRecently().last()
-                       LazyColumn() {
+                       /*LazyColumn() {
                            mutableListOf<Message>(Message("hello", true, "woef", Calendar.getInstance()))
                            items(count) { index ->
                                ChatItem(
@@ -161,7 +161,7 @@ class MainActivity : ComponentActivity() {
                                        navController.navigate("Chat?Id=$index")
                                    })
                            }
-                       }
+                       }*/
                        snapshotFlow { }
                    }
                 }
@@ -405,10 +405,12 @@ fun PasswordField(
 @Preview
 @Composable
 fun ChatItemPreview() {
-    val messagelijsttest = mutableListOf<String> ( "Message", "Bericht 2000", "ik verveel me", "help")
+    var messagelijsttest = mutableListOf<Message> (Message("hello", true, "woef", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()))
+    //var testuserinfo = mutableStateOf<>(useri)
+
     Baneapp2Theme {
         //MessageCard("Dit is een testbericht OwO", "Username", painterResource(R.drawable.subpicture), "4:23")
-
+        chatu(messagelijsttest)
     }
 
 
@@ -471,15 +473,18 @@ fun MessageCard(message: String, name: String,  pfp: Painter , tijd: String) {
     }
 }
 @Composable
-fun Chat(/*navController: NavController, person: Person*/ messages: MutableList<Message>) {
+fun chatu(/*navController: NavController, person: Person*/ messages: MutableList<Message>) {
     //var contactNaam: String = person.toString()
     val MessageModifier = Modifier
         .fillMaxSize()
         .background(Color(0xFF373737))
         .padding(10.dp)
     val textModifier = TextStyle(fontSize = 20.sp, color = Color(0xFFA7A7A7))
-    val pfp: Painter = painterResource(R.drawable.subpicture)
-    val tijd: String = "4:20"
+    var pfp: Painter
+    var eigenNaam: String = "Maurice"
+    var contactNaam: String = "Era"
+    var naam: String
+    var tijd: String
 
 
     Scaffold(topBar = {
@@ -512,8 +517,17 @@ fun Chat(/*navController: NavController, person: Person*/ messages: MutableList<
             )
             LazyColumn(modifier = MessageModifier) {
                 items(messages.count()) {Message ->
-                    MessageCard(messages[Message]!!.message, "Motherfricker", pfp, tijd)
-
+                    if(messages[Message].self) {
+                        pfp = painterResource(R.drawable.subpicture)
+                        naam = eigenNaam
+                    }
+                    else {
+                        pfp = painterResource(R.drawable.subpictureother)
+                        naam = contactNaam
+                    }
+                    var tijddatum = messages[Message].time.getTime()
+                    tijd = tijddatum.hours.toString() + ":" + tijddatum.minutes.toString()
+                    MessageCard(messages[Message].message, naam, pfp, tijd)
                 }
             }
         }
