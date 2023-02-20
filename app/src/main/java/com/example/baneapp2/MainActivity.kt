@@ -5,12 +5,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActionScope
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.runtime.*
@@ -20,16 +23,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.*
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.baneapp2.ui.theme.Baneapp2Theme
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.WebSocket
 
 class MainActivity : ComponentActivity() {
@@ -42,7 +50,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val userInfo = rememberSaveable { mutableStateOf(User()) }
-            val messages: MutableMap<String, MutableList<String>> = rememberSaveable{ mutableMapOf() }
+            val messages: MutableMap<String, MutableList<Message>> = rememberSaveable{ mutableMapOf() }
             val persons: MutableMap<String, Person> = rememberSaveable{ mutableMapOf() }
             val navController = rememberNavController()
             Baneapp2Theme(colors = darkColors()) {
@@ -54,7 +62,10 @@ class MainActivity : ComponentActivity() {
                         composable("Login") { Login(navController) }
                         composable("Register") { Register(navController) }
                         composable("Main") { Main(navController, userInfo, messages, persons)}
-                        composable("Chat") { Chat(navController, /*TODO(More?)*/) }
+                        composable("Chat/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType})) {
+                            val id = it.arguments!!.getString("id")!!
+                            Chat(navController, persons[id]!!, messages[id]!!)
+                        }
                     }
                 }
             }
@@ -63,7 +74,7 @@ class MainActivity : ComponentActivity() {
 
 
     @Composable
-    fun Chat(navController: NavController, /*TODO(MORE)*/) {
+    fun Chat(navController: NavController, person: Person, messages: MutableList<Message>) {
         val contactName: String = "Test"
 
         Scaffold(topBar = {
@@ -92,15 +103,30 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun Main(navController: NavController, userInfo: MutableState<User>, messages: MutableMap<String, MutableList<String>>, persons: MutableMap<String, Person>) {
-        if (connectWebSocket(userInfo)) {
-
+    fun Main(navController: NavController, userInfo: MutableState<User>, messages: MutableMap<String, MutableList<Message>>, persons: MutableMap<String, Person>) {
+        Column( modifier = Modifier.fillMaxSize()) {
+            Row() {
+                LazyColumn {
+                    itemsIndexed(persons.keys.toList()) { _, id ->
+                        ChatItem(name = persons[id]?.name.orEmpty(), num = persons[id]?.num.orEmpty(), onClick = {
+                            navController.navigate("Chat?Id=$id")
+                        })
+                    }
+                }
+            }
+            BottomAppBar {
+                IconButton(onClick = {navController.navigate("Settings")}){Icon(Icons.Filled.Settings, "Settings")}
+            }
         }
     }
 
     fun connectWebSocket(userInfo: MutableState<User>): Boolean {
-        if (userInfo.value.token != null) {
-            return true
+        val token = userInfo.value.token
+        if (token != null) {
+            okHttpClient.newWebSocket(
+                request = Request.Builder().addHeader("Id", userInfo.value.id).addHeader("Token", token).build(),
+
+            )
         } else {
             return false
         }
@@ -300,5 +326,22 @@ fun PasswordField(
     )
 }
 
+@Preview
+@Composable
+fun ChatItemPreview() {
+    Baneapp2Theme {
+        ChatItem()
+    }
+}
 
-
+@OptIn(ExperimentalMaterialApi::class)
+@Composable
+fun ChatItem(icon: Painter = painterResource(R.drawable.bane_logo), name: String = "No Name", num: String = "0000", onClick: () -> Unit = {}) {
+    Card(onClick = onClick) {
+        Row(modifier = Modifier.padding(8.dp)) {
+            Image(icon, name, modifier = Modifier.height(30.dp))
+            Text(text = name)
+            Text(text = "#$num", color = MaterialTheme.colors.primaryVariant)
+        }
+    }
+}

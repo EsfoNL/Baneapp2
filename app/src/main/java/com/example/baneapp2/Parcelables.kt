@@ -17,7 +17,9 @@ data class User(
 @Parcelize
 data class Person(
     val name: String,
-    val num: String
+    val num: String,
+    val id: String,
+    val image: String
 ) : Parcelable
 
 @Parcelize data class Message(
