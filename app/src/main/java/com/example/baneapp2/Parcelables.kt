@@ -1,9 +1,7 @@
 package com.example.baneapp2
 
-import android.os.Bundle
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
-import org.json.JSONObject
 
 @Parcelize
 data class User(
@@ -20,4 +18,10 @@ data class User(
 data class Person(
     val name: String,
     val num: String
+) : Parcelable
+
+@Parcelize data class Message(
+    val sender: String,
+    val self: Boolean,
+    val message: String
 ) : Parcelable
