@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActionScope
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.LifecycleCoroutineScope
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.NavType
@@ -39,18 +41,33 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.room.Room
+import androidx.room.RoomDatabase
 import com.example.baneapp2.ui.theme.Baneapp2Theme
+import kotlinx.coroutines.flow.count
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.last
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import okio.ByteString
+import java.sql.Time
+import java.sql.Timestamp
+import java.util.Calendar
 
 class MainActivity : ComponentActivity() {
 
 
     val okHttpClient = OkHttpClient()
     var websocket: WebSocket? = null
+    val dataBase = Room.databaseBuilder(applicationContext, DataBase::class.java, "db").build()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        suspend {
+
+        }
         super.onCreate(savedInstanceState)
         setContent {
             val userInfo = rememberSaveable { mutableStateOf(User()) }
@@ -131,14 +148,25 @@ class MainActivity : ComponentActivity() {
     fun Main(navController: NavController, userInfo: MutableState<User>, messages: MutableMap<String, MutableList<Message>>, persons: MutableMap<String, Person>) {
         Column( modifier = Modifier.fillMaxSize()) {
             Row() {
-                LazyColumn {
-                    itemsIndexed(persons.keys.toList()) { _, id ->
-                        ChatItem(name = persons[id]?.name.orEmpty(), num = persons[id]?.num.orEmpty(), onClick = {
-                            navController.navigate("Chat?Id=$id")
-                        })
-                    }
+                   LaunchedEffect(dataBase.personDao().count(), dataBase.personDao().personsRecently()) {
+                       val count = dataBase.personDao().count().last()
+                       val recent_persons = dataBase.personDao().personsRecently().last()
+                       LazyColumn() {
+                           mutableListOf<Message>(Message("hello", true, "woef", Calendar.getInstance()))
+                           items(count) { index ->
+                               ChatItem(
+                                   name = recent_persons[index]?.name.orEmpty(),
+                                   num = recent_persons[index]?.num.orEmpty(),
+                                   onClick = {
+                                       navController.navigate("Chat?Id=$index")
+                                   })
+                           }
+                       }
+                       snapshotFlow { }
+                   }
                 }
-            }
+
+
             BottomAppBar {
                 IconButton(onClick = {navController.navigate("Settings")}){Icon(Icons.Filled.Settings, "Settings")}
             }
@@ -149,10 +177,11 @@ class MainActivity : ComponentActivity() {
     fun connectWebSocket(userInfo: MutableState<User>): Boolean {
         val token = userInfo.value.token
         if (token != null) {
-            okHttpClient.newWebSocket(
+            websocket = okHttpClient.newWebSocket(
                 request = Request.Builder().addHeader("Id", userInfo.value.id).addHeader("Token", token).build(),
-
+                listener = WsListener()
             )
+            return true
         } else {
             return false
         }
@@ -304,6 +333,17 @@ class MainActivity : ComponentActivity() {
                         .height(TextFieldDefaults.MinHeight)
                 )
             }
+        }
+    }
+
+    class WsListener : WebSocketListener() {
+        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            super.onClosed(webSocket, code, reason)
+        }
+
+        override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+            super.onMessage(webSocket, bytes)
+            val now = Calendar.getInstance()
         }
     }
 }
