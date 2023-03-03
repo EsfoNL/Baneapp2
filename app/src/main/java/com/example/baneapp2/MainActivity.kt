@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
+                        composable("Settings"){Settings()}
                         composable(
                             "Chat/{id}",
                             arguments = listOf(navArgument("id") { type = NavType.StringType })
@@ -106,6 +107,63 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         user.value.save(getSharedPreferences("User", MODE_PRIVATE));
+    }
+
+    @Composable
+    fun Settings(){
+        var tekstkleurtekst by remember{mutableStateOf("A7A7A7")}
+        var achtergrondkleurtekst by remember{mutableStateOf("373737")}
+        var voorgrondkleurtekst by remember{mutableStateOf("272727")}
+        var tekstkleur: String = "0xFFA7A7A7"
+        var achtergrondkleur: String = "0xFF373737"
+        var voorgrondkleur: String = "0xFF272727"
+
+
+        Scaffold(topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = {
+                        navController.navigateUp()
+                    }) {
+                        Icon(Icons.Filled.ArrowBack, "Back to Contacts")
+                    }
+                },
+                title = {
+                    Text(text = "Instellingen")
+                },
+                actions = {
+                    IconButton(onClick = {
+                        tekstkleur = "0xFF" + tekstkleurtekst
+                        achtergrondkleur = "0xFF" + achtergrondkleurtekst
+                        voorgrondkleur = "0xFF" + voorgrondkleurtekst
+                    }) {
+                        Icon(Icons.Filled.Save, "Save Changes")
+                    }
+                }
+            )
+        }) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF373737))
+                        .padding(it)
+                ) {
+                    Row(modifier = Modifier) {
+                        Text(text = "Tekstkleur:")
+                        SingleLineInput(tekstkleurtekst, {tekstkleurtekst = it})
+                    }
+                    Row(modifier = Modifier) {
+                        Text(text = "Voorgrondkleur:")
+                        SingleLineInput(voorgrondkleurtekst, {voorgrondkleurtekst = it})
+                    }
+                    Row(modifier = Modifier) {
+                        Text(text = "Achtergrondkleur: ")
+                        SingleLineInput(achtergrondkleurtekst, {achtergrondkleurtekst = it})
+                    }
+                }
+
+
+        }
     }
 
 
