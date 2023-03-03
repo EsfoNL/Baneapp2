@@ -73,18 +73,19 @@ interface PersonDao {
 
 @Entity
 data class Message(
-    @PrimaryKey
     val sender: String,
     val self: Boolean,
     val message: String,
-    val time: Instant = Instant.now()
+    val time: Instant = Instant.now(),
+    @PrimaryKey(autoGenerate = true)
+    val messageId: Long = 0,
 )
 
 @Dao
 interface MessageDao {
     @Query("select * from message where sender = :id order by time desc")
     fun messagesById(id: String): Flow<List<Message>>
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(message: Message)
 
 }

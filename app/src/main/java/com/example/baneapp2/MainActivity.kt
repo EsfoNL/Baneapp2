@@ -1,6 +1,7 @@
 package com.example.baneapp2
 
 import android.os.Bundle
+import android.util.JsonReader
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -82,7 +83,9 @@ class MainActivity : ComponentActivity() {
                         composable("Login") { Login() }
                         composable("Register") { Register() }
                         composable("Main") {
-                            if (connectWebSocket()) {
+                            if (websocket != null) {
+                              Main()
+                            } else if (connectWebSocket()) {
                                 Main()
                             } else {
                                 navController.navigate("Login") {
@@ -96,7 +99,10 @@ class MainActivity : ComponentActivity() {
                             arguments = listOf(navArgument("id") { type = NavType.StringType })
                         ) {
                             val id = it.arguments!!.getString("id")!!
-//                            Chat(navController, id)
+                            Chat(id)
+                        }
+                        composable("AddPerson") {
+                            AddPerson()
                         }
                     }
                 }
@@ -166,21 +172,79 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Composable
+    fun AddPerson() {
+        var name by remember { mutableStateOf("") }
+        Scaffold(topBar = {
+            TopAppBar(
+                title = { Text("Add Person") },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        navController.popBackStack()
+                    }) {
+                        Icon(Icons.Filled.ArrowBack, "Back to Main")
+                    }
+                }
+                )
+        }) {
+
+            Box(modifier = Modifier.padding(it).fillMaxSize()) {
+                SingleLineInput(
+                    value = name,
+                    modifier = Modifier.align(Alignment.Center),
+                    onValueChange = {name = it},
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        MainScope().launch(Dispatchers.IO) {
+                            val id = addPerson(name)
+                            Log.e("AddPerson", id.toString())
+                            if (id != null){
+                                withContext(Dispatchers.Main) {
+                                    navController.navigate("Chat/$id")
+                                }
+                            }
+                        }
+                    })
+                )
+            }
+        }
+    }
+
+    suspend fun addPerson(name: String): String? {
+        try {
+            val (name_split, num) = name.split('#')
+            val id = okHttpClient.newCall(Request.Builder().url("https://esfokk.nl/api/v0/query_name").header("name", name).build()).execute().body?.string()
+            Log.e("AddPerson", id.toString())
+            return if (id != null && id != "") {
+                dataBase.personDao().insert(
+                    Person(
+                        id,
+                        name_split,
+                        num,
+                        "",
+                    )
+                )
+                id
+            } else {
+                null
+            }
+        } catch (e: Throwable) {
+            Log.e("addPerson", e.toString())
+            return null
+        }
+    }
 
 
     @Composable
     fun Chat(id: String) {
         //var contactNaam: String by dataBase.PersonDao()
-        var contactNaam: String = "vriend"
+        val contact by produceState<Person?>(null) {
+            value = dataBase.personDao().personById(id)
+        }
         val MessageModifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF373737))
-            .padding(10.dp)
-        val textModifier = TextStyle(fontSize = 20.sp, color = Color(0xFFA7A7A7))
-        var pfp: Painter
-        var eigenNaam: String = "Maurice"
-        var naam: String
-        var tijd: String
+            .padding(8.dp)
         val messageList by dataBase.messageDao().messagesById(id).collectAsState(listOf())
 
 
@@ -195,66 +259,40 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 title = {
-                    Text(text = contactNaam)
+                    Text(text = contact?.name.orEmpty())
                 })
         }) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize().padding(it)) {
                 LazyColumn(
                     modifier = Modifier
-                        .weight(10f)
-                        .fillMaxSize()
-                        .background(Color(0xFF373737))
-                        .padding(10.dp)
+                        .weight(1f)
+                        .padding(8.dp),
+                    reverseLayout = true
                 ) {
                     items(messageList.count()) { Message ->
-                        if (messageList[Message].self) {
-                            pfp = painterResource(R.drawable.subpicture)
-                            naam = eigenNaam
+                        val (pfp, naam) = if (messageList[Message].self) {
+                            Pair(painterResource(R.drawable.subpicture), user.value.name)
                         } else {
-                            pfp = painterResource(R.drawable.subpictureother)
-                            naam = contactNaam
+                            Pair(painterResource(R.drawable.subpictureother), contact?.name.orEmpty())
                         }
-                        var tijddatum =
+                        val tijddatum =
                             LocalDateTime.ofInstant(messageList[Message].time, ZoneOffset.UTC)
-                        tijd =
+                        val tijd =
                             tijddatum.getHour().toString() + ":" + tijddatum.getMinute().toString()
                         MessageCard(messageList[Message].message, naam, pfp, tijd)
                     }
                 }
-                Row(
-                    modifier = Modifier
-                        .padding(it)
-                        .fillMaxSize()
-                        .weight(1f)
-                        .background(Color(0xFF272727))
-
-                ) {
+                Row {
                     var value by remember { mutableStateOf("") }
                     TextField(
                         value = value,
                         onValueChange = { value = it },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .weight(9f)
-                        ,
-
-                        colors = TextFieldDefaults.textFieldColors(
-                            backgroundColor = Color(0xFF373737),
-                            textColor = MaterialTheme.colors.background
-                        )
+                        modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = {
-                        MainScope().launch {
-                            var nieuwBericht: Message =
-                                Message(eigenNaam, true, value, Calendar.getInstance().toInstant())
-                            dataBase.messageDao().insert(nieuwBericht)
-                            value = ""
-                        }
+                        sendAndStoreMessage(value, id)
                     }) {
-                        Icon(Icons.Filled.Send, contentDescription = "Send", modifier = Modifier
-                            .fillMaxSize()
-                            .weight(1f)
-                        )
+                        Icon(Icons.Filled.Send, contentDescription = "Send")
                     }
 
                 }
@@ -269,37 +307,44 @@ class MainActivity : ComponentActivity() {
 
         Scaffold(
             bottomBar = { BottomNavigation() {
-                IconButton(onClick = { MainScope().launch {
-                    val count = Random().nextInt()
-                    dataBase.personDao().insert(Person(id = "$count", image = "", name = "person $count", num = count.toString().take(4)))
-                } }) { Icon(Icons.Filled.Settings, "Settings") }
+                IconButton(onClick = {
+                    navController.navigate("AddPerson")
+                }) { Icon(Icons.Filled.Add, "Settings") }
+                IconButton(onClick = {
+                    navController.navigate("Settings")
+                }) { Icon(Icons.Filled.Settings, "Settings") }
             } }
         ) {
             Row(modifier = Modifier.padding(it)) {
 
 
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {
                     items(recent_persons.count()) { index ->
                         ChatItem(
                             name = recent_persons[index].name,
                             num = recent_persons[index].num,
                             onClick = {
-                                navController.navigate("Chat?Id=$index")
+                                navController.navigate("Chat/${recent_persons[index].id}")
                             })
                     }
                 }
-
-            }
-
-
-//
-//            BottomAppBar {
-//                IconButton(onClick = {navController.navigate("Settings")}){Icon(Icons.Filled.Settings, "Settings")}
-//            }
             }
         }
+    }
 
-
+    fun sendAndStoreMessage(message: String, id: String) {
+        try {
+            websocket?.send(
+                JSONObject().put("type", "Message").put("message", message).put("receiver", id)
+                    .toString()
+            )
+        } catch (e: Throwable) {
+            return Unit
+        }
+        MainScope().launch {
+            dataBase.messageDao().insert(Message(user.value.id, true, message));
+        }
+    }
 
     fun connectWebSocket(): Boolean {
         val token = user.value.token
@@ -363,7 +408,9 @@ class MainActivity : ComponentActivity() {
                     onClick = {
                         MainScope().launch(Dispatchers.IO) {
                             if (login(email, password)) {
-                                navController.navigate("Main")
+                                withContext(Dispatchers.Main) {
+                                    navController.navigate("Main")
+                                }
                             }
                         }
                     },
@@ -432,7 +479,7 @@ class MainActivity : ComponentActivity() {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = {
-                        navController.navigateUp()
+                        navController.popBackStack()
                     }) {
                         Icon(Icons.Filled.ArrowBack, "Back to Login")
                     }
@@ -479,8 +526,15 @@ class MainActivity : ComponentActivity() {
 
                 Button(
                     onClick = {
-
-                    },
+                        MainScope().launch(Dispatchers.IO) {
+                            if (register(name, email, password)) {
+                                withContext(Dispatchers.Main) {
+                                    navController.navigate("Login") {
+                                        this.popUpTo("Login")
+                                    }
+                                }
+                            }
+                        }},
                     content = { Text("Register", style = MaterialTheme.typography.h5) },
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
@@ -490,6 +544,15 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    fun register(name: String, email: String, password: String): Boolean {
+        return try {
+            okHttpClient.newCall(Request.Builder().url("https://esfokk.nl/api/v0/register").header("name", name).header("email", email).header("password", password).build()).execute().isSuccessful
+        } catch (e: Throwable) {
+            false
+        }
+    }
+
 
     inner class WsListener : WebSocketListener() {
 
