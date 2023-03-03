@@ -1,20 +1,13 @@
 package com.example.baneapp2
 
-import android.content.Context
 import android.os.Bundle
-import android.util.AttributeSet
-import android.view.View
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.annotation.MainThread
-import androidx.annotation.UiThread
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActionScope
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -22,7 +15,6 @@ import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
@@ -36,26 +28,21 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.LifecycleCoroutineScope
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.room.Room
-import androidx.room.RoomDatabase
 import com.example.baneapp2.ui.theme.Baneapp2Theme
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.count
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.last
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
+import okhttp3.*
 import okio.ByteString
+import org.json.JSONObject
+import java.nio.charset.Charset
+import java.util.*
 import java.sql.Time
 import java.sql.Timestamp
 import java.time.Instant
@@ -71,8 +58,8 @@ class MainActivity : ComponentActivity() {
     val okHttpClient = OkHttpClient()
     var websocket: WebSocket? = null
     lateinit var dataBase: DataBase
-
-
+    lateinit var user: MutableState<User>
+    lateinit var navController: NavHostController
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,8 +67,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
 
-            val userInfo = rememberSaveable { mutableStateOf(User()) }
-            val navController = rememberNavController()
+            user = remember { mutableStateOf(User(getSharedPreferences("User", MODE_PRIVATE))) }
+            Log.e("onCreate", user.value.toString())
+            navController = rememberNavController()
             Baneapp2Theme(colors = darkColors()) {
                 // A surface container using the 'background' color from the theme
                 Surface(
@@ -89,17 +77,25 @@ class MainActivity : ComponentActivity() {
                 ) {
                     NavHost(
                         navController = navController,
-                        startDestination = if (userInfo.value.token != null) "Main" else "Login"
+                        startDestination = if (user.value.token != null) "Main" else "Login"
                     ) {
-                        composable("Login") { Login(navController) }
-                        composable("Register") { Register(navController) }
-                        composable("Main") { Main(navController, userInfo) }
+                        composable("Login") { Login() }
+                        composable("Register") { Register() }
+                        composable("Main") {
+                            if (connectWebSocket()) {
+                                Main()
+                            } else {
+                                navController.navigate("Login") {
+                                    this.popUpTo("Login")
+                                }
+                            }
+                        }
                         composable(
                             "Chat/{id}",
                             arguments = listOf(navArgument("id") { type = NavType.StringType })
                         ) {
                             val id = it.arguments!!.getString("id")!!
-                            Chat(navController, id)
+//                            Chat(navController, id)
                         }
                     }
                 }
@@ -107,9 +103,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+        user.value.save(getSharedPreferences("User", MODE_PRIVATE));
+    }
+
+
 
     @Composable
-    fun Chat(navController: NavController, id: String) {
+    fun Chat(id: String) {
         //var contactNaam: String by dataBase.PersonDao()
         var contactNaam: String = "vriend"
         val MessageModifier = Modifier
@@ -197,7 +199,7 @@ class MainActivity : ComponentActivity() {
 
 
     @Composable
-    fun Main(navController: NavController, userInfo: MutableState<User>) {
+    fun Main() {
         val recent_persons by dataBase.personDao().personsRecently().collectAsState(listOf())
 
         Scaffold(
@@ -214,8 +216,8 @@ class MainActivity : ComponentActivity() {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(recent_persons.count()) { index ->
                         ChatItem(
-                            name = recent_persons[index]?.name.orEmpty(),
-                            num = recent_persons[index]?.num.orEmpty(),
+                            name = recent_persons[index].name,
+                            num = recent_persons[index].num,
                             onClick = {
                                 navController.navigate("Chat?Id=$index")
                             })
@@ -234,21 +236,21 @@ class MainActivity : ComponentActivity() {
 
 
 
-    fun connectWebSocket(userInfo: MutableState<User>): Boolean {
-        val token = userInfo.value.token
-        if (token != null) {
+    fun connectWebSocket(): Boolean {
+        val token = user.value.token
+        return if (token != null) {
             websocket = okHttpClient.newWebSocket(
-                request = Request.Builder().addHeader("Id", userInfo.value.id).addHeader("Token", token).build(),
+                request = Request.Builder().addHeader("Id", user.value.id).addHeader("Token", token).url("wss://esfokk.nl/api/v0/ws").build(),
                 listener = WsListener()
             )
-            return true
+            true
         } else {
-            return false
+            false
         }
     }
 
     @Composable
-    fun Login(navController: NavController) {
+    fun Login() {
         val focusManager = LocalFocusManager.current
         var email by remember { mutableStateOf("") }
         var password by remember { mutableStateOf("") }
@@ -282,19 +284,22 @@ class MainActivity : ComponentActivity() {
                     { password = it },
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                     onDone = {
-                        if (login(email, password)) {
-                            navController.navigate("Main")
-                        } else {
-
+                        val handle = MainScope().launch(Dispatchers.IO) {
+                            if (login(email, password)) {
+                                withContext(Dispatchers.Main) {
+                                    navController.navigate("Main")
+                                }
+                            }
                         }
+
                     }
                 )
                 Button(
                     onClick = {
-                        if (login(email, password)) {
-                            navController.navigate("Main")
-                        } else{
-
+                        MainScope().launch(Dispatchers.IO) {
+                            if (login(email, password)) {
+                                navController.navigate("Main")
+                            }
                         }
                     },
                     modifier = Modifier
@@ -324,11 +329,36 @@ class MainActivity : ComponentActivity() {
     }
 
     fun login(email: String, password: String): Boolean {
-        return true
+            try {
+                val body = okHttpClient.newCall(
+                    Request.Builder().get()
+                        .addHeader("email", email)
+                        .addHeader("password", password)
+                        .url("https://esfokk.nl/api/v0/login")
+                        .build()
+                ).execute().body?.string() ?: "{}"
+                Log.e("Login", body)
+                val json = JSONObject(
+                    body
+                )
+                Log.e("Login", json.toString())
+                user.value = User(
+                    json.getString("token"),
+                    json.getString("name"),
+                    json.getString("num"),
+                    json.getString("id"),
+                    email,
+                    json.getString("refresh_token")
+                );
+            } catch (e: Throwable) {
+                Log.e("Login", e.toString())
+                return false
+            }
+            return true
     }
 
     @Composable
-    fun Register(navController: NavController) {
+    fun Register() {
         val focusManager = LocalFocusManager.current
         var email by remember { mutableStateOf("") }
         var password by remember { mutableStateOf("") }
@@ -396,14 +426,44 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    class WsListener : WebSocketListener() {
+    inner class WsListener : WebSocketListener() {
+
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
             super.onClosed(webSocket, code, reason)
+            if (!connectWebSocket()) {
+                Log.e("Websocket onClosed", reason.toString())
+            }
+
         }
 
-        override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-            super.onMessage(webSocket, bytes)
-            val now = Calendar.getInstance()
+        override fun onOpen(webSocket: WebSocket, response: Response) {
+            super.onOpen(webSocket, response)
+            Log.e("Websocket onOpen", response.toString())
+        }
+
+        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            super.onFailure(webSocket, t, response)
+            Log.e("Websocket onFailure", t.toString() + ' ' + response?.body.toString())
+        }
+
+        override fun onMessage(webSocket: WebSocket, text: String) {
+            super.onMessage(webSocket, text)
+            MainScope().launch(Dispatchers.IO) {
+                try {
+                    val json = JSONObject(text)
+                    val message = Message(
+                        sender = json.getString("sender"),
+                        self = false,
+                        message = json.getString("message")
+                    )
+                    Log.e("Websocket onMessage", message.toString())
+                    dataBase.messageDao().insert(
+                        message
+                    )
+                } catch (e: Throwable) {
+                    Log.e("Websocket onMessage", e.toString())
+                }
+            }
         }
     }
 }
