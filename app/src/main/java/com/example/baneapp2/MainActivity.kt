@@ -11,6 +11,7 @@ import androidx.annotation.UiThread
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -58,6 +59,8 @@ import okio.ByteString
 import java.sql.Time
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.util.Calendar
 import java.util.Random
 import kotlin.coroutines.coroutineContext
@@ -107,7 +110,8 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun Chat(navController: NavController, id: String) {
-        var contactNaam: String = person.toString()
+        //var contactNaam: String by dataBase.PersonDao()
+        var contactNaam: String = "vriend"
         val MessageModifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF373737))
@@ -117,13 +121,15 @@ class MainActivity : ComponentActivity() {
         var eigenNaam: String = "Maurice"
         var naam: String
         var tijd: String
+        val messageList by dataBase.messageDao().messagesById(id).collectAsState(listOf())
+
 
 
         Scaffold(topBar = {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = {
-                        //navController.navigateUp()
+                        navController.navigateUp()
                     }) {
                         Icon(Icons.Filled.ArrowBack, "Back to Contacts")
                     }
@@ -132,40 +138,59 @@ class MainActivity : ComponentActivity() {
                     Text(text = contactNaam)
                 })
         }) {
-            LazyColumn(modifier = MessageModifier) {
-                items(messages.count()) {Message ->
-                    if(messages[Message].self) {
-                        pfp = painterResource(R.drawable.subpicture)
-                        naam = eigenNaam
+            Column(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(10f)
+                        .fillMaxSize()
+                        .background(Color(0xFF373737))
+                        .padding(10.dp)
+                ) {
+                    items(messageList.count()) { Message ->
+                        if (messageList[Message].self) {
+                            pfp = painterResource(R.drawable.subpicture)
+                            naam = eigenNaam
+                        } else {
+                            pfp = painterResource(R.drawable.subpictureother)
+                            naam = contactNaam
+                        }
+                        var tijddatum =
+                            LocalDateTime.ofInstant(messageList[Message].time, ZoneOffset.UTC)
+                        tijd =
+                            tijddatum.getHour().toString() + ":" + tijddatum.getMinute().toString()
+                        MessageCard(messageList[Message].message, naam, pfp, tijd)
                     }
-                    else {
-                        pfp = painterResource(R.drawable.subpictureother)
-                        naam = contactNaam
-                    }
-                    var tijddatum = messages[Message].time.getTime()
-                    tijd = tijddatum.hours.toString() + ":" + tijddatum.minutes.toString()
-                    MessageCard(messages[Message].message, naam, pfp, tijd)
                 }
-            }
-            Row(
-                modifier = Modifier
-                    .padding(it)
-                    .fillMaxSize()
+                Row(
+                    modifier = Modifier
+                        .padding(it)
+                        .fillMaxSize()
+                        .weight(1f)
+                        .background(Color(0xFF272727))
 
-            ) {
-                var value by remember { mutableStateOf("") }
-                TextField(
-                    value = value,
-                    onValueChange = { value = it },
-                    colors = TextFieldDefaults.textFieldColors(
-                        backgroundColor = Color(0xFF373737),
-                        textColor = MaterialTheme.colors.background
+                ) {
+                    var value by remember { mutableStateOf("") }
+                    TextField(
+                        value = value,
+                        onValueChange = { value = it },
+                        modifier = Modifier.fillMaxSize(),
+                        colors = TextFieldDefaults.textFieldColors(
+                            backgroundColor = Color(0xFF373737),
+                            textColor = MaterialTheme.colors.background
+                        )
                     )
-                )
-                IconButton(onClick = { /*TODO*/ }) {
-                    Icon(Icons.Filled.Send, contentDescription = "Send")
-                }
+                    IconButton(onClick = {
+                        MainScope().launch {
+                            var nieuwBericht: Message =
+                                Message(eigenNaam, true, value, Calendar.getInstance().toInstant())
+                            dataBase.messageDao().insert(nieuwBericht)
+                            value = ""
+                        }
+                    }) {
+                        Icon(Icons.Filled.Send, contentDescription = "Send", modifier = Modifier.fillMaxSize())
+                    }
 
+                }
             }
         }
     }
@@ -440,12 +465,13 @@ fun PasswordField(
 @Preview
 @Composable
 fun ChatItemPreview() {
-    //var messagelijsttest = mutableListOf<Message> (Message("hello", true, "woef", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()), Message("boyy", false, "barf", Calendar.getInstance()))
+    var messagelijsttest = mutableListOf<Message> (Message("hello", true, "woef", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()))
     //var testuserinfo = mutableStateOf<>(useri)
 
     Baneapp2Theme {
         //MessageCard("Dit is een testbericht OwO", "Username", painterResource(R.drawable.subpicture), "4:23")
         //chatu(messagelijsttest)
+        Chattest(messagelijsttest)
     }
 
 
@@ -492,10 +518,13 @@ fun MessageCard(message: String, name: String,  pfp: Painter , tijd: String) {
                         style = MaterialTheme.typography.h4,
 
                     )
-                    Text(
-                        text = tijd,
-                        style = MaterialTheme.typography.body2,
-                    )
+
+                        Text(
+                            text = tijd,
+                            style = MaterialTheme.typography.body2,
+
+                            )
+
                 }
 
             }
@@ -507,19 +536,22 @@ fun MessageCard(message: String, name: String,  pfp: Painter , tijd: String) {
         }
     }
 }
-/*@Composable
-fun chatu(/*navController: NavController, person: Person*/ messages: MutableList<Message>) {
-    //var contactNaam: String = person.toString()
+@Composable
+fun Chattest(/*navController: NavController, id: */messageList: List<Message>) {
+    //var contactNaam: String by dataBase.PersonDao()
+    var contactNaam: String = "vriend"
     val MessageModifier = Modifier
         .fillMaxSize()
         .background(Color(0xFF373737))
         .padding(10.dp)
+
     val textModifier = TextStyle(fontSize = 20.sp, color = Color(0xFFA7A7A7))
     var pfp: Painter
     var eigenNaam: String = "Maurice"
-    var contactNaam: String = "Era"
     var naam: String
     var tijd: String
+    //val messageList by dataBase.messageDao().messagesById(id).collectAsState(listOf())
+
 
 
     Scaffold(topBar = {
@@ -532,46 +564,55 @@ fun chatu(/*navController: NavController, person: Person*/ messages: MutableList
                 }
             },
             title = {
-                Text(text = "contactNaam")
-            },
-        )
-    }) {
-        LazyColumn(modifier = MessageModifier) {
-            items(messages.count()) {Message ->
-                if(messages[Message].self) {
-                    pfp = painterResource(R.drawable.subpicture)
-                    naam = eigenNaam
-                }
-                else {
-                    pfp = painterResource(R.drawable.subpictureother)
-                    naam = contactNaam
-                }
-                    var tijddatum = messages[Message].time.getTime()
-                    tijd = tijddatum.hours.toString() + ":" + tijddatum.minutes.toString()
-                    MessageCard(messages[Message].message, naam, pfp, tijd)
-                }
-            }
-        Row(
-            modifier = Modifier
-                .padding(it)
+                Text(text = contactNaam)
+            })
+    }
+
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            LazyColumn(modifier = Modifier
+                .weight(10f)
                 .fillMaxSize()
-
-        ) {
-            var value by remember { mutableStateOf("")}
-            TextField(
-                value= value,
-                onValueChange = {value = it},
-                colors = TextFieldDefaults.textFieldColors(
-                    backgroundColor = Color(0xFF373737),
-                    textColor = MaterialTheme.colors.background
-                )
-            )
-            IconButton(onClick = { /*TODO*/ }) {
-                Icon(Icons.Filled.Send, contentDescription = "Send")
+                .background(Color(0xFF373737))
+                .padding(10.dp)
+            ) {
+                items(messageList.count()) { Message ->
+                    if (messageList[Message].self) {
+                        pfp = painterResource(R.drawable.subpicture)
+                        naam = eigenNaam
+                    } else {
+                        pfp = painterResource(R.drawable.subpictureother)
+                        naam = contactNaam
+                    }
+                    var tijddatum =
+                        LocalDateTime.ofInstant(messageList[Message].time, ZoneOffset.UTC)
+                    tijd = tijddatum.getHour().toString() + ":" + tijddatum.getMinute().toString()
+                    MessageCard(messageList[Message].message, naam, pfp, tijd)
+                }
             }
+            Row(
+                modifier = Modifier
+                    .padding(it)
+                    .fillMaxSize()
+                    .weight(1f)
 
+            ) {
+                var value by remember { mutableStateOf("") }
+                TextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    colors = TextFieldDefaults.textFieldColors(
+                        backgroundColor = Color(0xFF373737),
+                        textColor = MaterialTheme.colors.background
+                    )
+                )
+                IconButton(onClick = {
+
+                }) {
+                    Icon(Icons.Filled.Send, contentDescription = "Send")
+                }
+            }
         }
     }
-}*/
-
+}
 
