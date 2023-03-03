@@ -233,7 +233,11 @@ class MainActivity : ComponentActivity() {
                     TextField(
                         value = value,
                         onValueChange = { value = it },
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(9f)
+                        ,
+
                         colors = TextFieldDefaults.textFieldColors(
                             backgroundColor = Color(0xFF373737),
                             textColor = MaterialTheme.colors.background
@@ -247,7 +251,10 @@ class MainActivity : ComponentActivity() {
                             value = ""
                         }
                     }) {
-                        Icon(Icons.Filled.Send, contentDescription = "Send", modifier = Modifier.fillMaxSize())
+                        Icon(Icons.Filled.Send, contentDescription = "Send", modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f)
+                        )
                     }
 
                 }
