@@ -1,8 +1,13 @@
 package com.example.baneapp2
 
+import android.content.Context
 import android.os.Bundle
+import android.util.AttributeSet
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.annotation.MainThread
+import androidx.annotation.UiThread
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -44,10 +49,10 @@ import androidx.navigation.navArgument
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.example.baneapp2.ui.theme.Baneapp2Theme
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.count
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.last
-import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.WebSocket
@@ -55,37 +60,46 @@ import okhttp3.WebSocketListener
 import okio.ByteString
 import java.sql.Time
 import java.sql.Timestamp
+import java.time.Instant
 import java.util.Calendar
+import java.util.Random
+import kotlin.coroutines.coroutineContext
 
 class MainActivity : ComponentActivity() {
 
 
     val okHttpClient = OkHttpClient()
     var websocket: WebSocket? = null
-    val dataBase = Room.databaseBuilder(applicationContext, DataBase::class.java, "db").build()
+    lateinit var dataBase: DataBase
+
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        suspend {
-
-        }
         super.onCreate(savedInstanceState)
+        dataBase = Room.databaseBuilder(applicationContext, DataBase::class.java, "db").addTypeConverter(Convert()).build()
+
         setContent {
+
             val userInfo = rememberSaveable { mutableStateOf(User()) }
-            val messages: MutableMap<String, MutableList<Message>> = rememberSaveable{ mutableMapOf() }
-            val persons: MutableMap<String, Person> = rememberSaveable{ mutableMapOf() }
             val navController = rememberNavController()
             Baneapp2Theme(colors = darkColors()) {
                 // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background
                 ) {
-                    NavHost(navController = navController, startDestination = if (userInfo.value.token != null) "Main" else "Login") {
+                    NavHost(
+                        navController = navController,
+                        startDestination = if (userInfo.value.token != null) "Main" else "Login"
+                    ) {
                         composable("Login") { Login(navController) }
                         composable("Register") { Register(navController) }
-                        composable("Main") { Main(navController, userInfo, messages, persons)}
-                        composable("Chat/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType})) {
+                        composable("Main") { Main(navController, userInfo) }
+                        composable(
+                            "Chat/{id}",
+                            arguments = listOf(navArgument("id") { type = NavType.StringType })
+                        ) {
                             val id = it.arguments!!.getString("id")!!
-                            Chat(navController, persons[id]!!, messages[id]!!)
+                            Chat(navController, id)
                         }
                     }
                 }
@@ -95,7 +109,7 @@ class MainActivity : ComponentActivity() {
 
 
     @Composable
-    fun Chat(navController: NavController, person: Person, messages: MutableList<Message>) {
+    fun Chat(navController: NavController, id: String) {
         var contactNaam: String = person.toString()
         val MessageModifier = Modifier
             .fillMaxSize()
@@ -125,18 +139,19 @@ class MainActivity : ComponentActivity() {
                     .fillMaxSize()
 
             ) {
-                var value by remember { mutableStateOf("")}
+                var value by remember { mutableStateOf("") }
                 TextField(
-                    value= value,
-                    onValueChange = {value = it},
+                    value = value,
+                    onValueChange = { value = it },
                     colors = TextFieldDefaults.textFieldColors(
                         backgroundColor = MaterialTheme.colors.background,
                         textColor = MaterialTheme.colors.background
                     )
                 )
                 LazyColumn(modifier = MessageModifier) {
-                    items(messages.count()) {Message ->
-                        MessageCard(messages[Message]!!.message, "Motherfricker", pfp, tijd)
+                    items(messages.count()) { Message ->
+                        val message = messages[Message]!!
+                        MessageCard(message.message, "Motherfricker", pfp, message.time.toString())
 
                     }
                 }
@@ -144,34 +159,43 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
     @Composable
-    fun Main(navController: NavController, userInfo: MutableState<User>, messages: MutableMap<String, MutableList<Message>>, persons: MutableMap<String, Person>) {
-        Column( modifier = Modifier.fillMaxSize()) {
-            Row() {
-                   LaunchedEffect(dataBase.personDao().count(), dataBase.personDao().personsRecently()) {
-                       val count = dataBase.personDao().count().last()
-                       val recent_persons = dataBase.personDao().personsRecently().last()
-                       /*LazyColumn() {
-                           mutableListOf<Message>(Message("hello", true, "woef", Calendar.getInstance()))
-                           items(count) { index ->
-                               ChatItem(
-                                   name = recent_persons[index]?.name.orEmpty(),
-                                   num = recent_persons[index]?.num.orEmpty(),
-                                   onClick = {
-                                       navController.navigate("Chat?Id=$index")
-                                   })
-                           }
-                       }*/
-                       snapshotFlow { }
-                   }
+    fun Main(navController: NavController, userInfo: MutableState<User>) {
+        val recent_persons by dataBase.personDao().personsRecently().collectAsState(listOf())
+
+        Scaffold(
+            bottomBar = { BottomNavigation() {
+                IconButton(onClick = { MainScope().launch {
+                    val count = Random().nextInt()
+                    dataBase.personDao().insert(Person(id = "$count", image = "", name = "person $count", num = count.toString().take(4)))
+                } }) { Icon(Icons.Filled.Settings, "Settings") }
+            } }
+        ) {
+            Row(modifier = Modifier.padding(it)) {
+
+
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(recent_persons.count()) { index ->
+                        ChatItem(
+                            name = recent_persons[index]?.name.orEmpty(),
+                            num = recent_persons[index]?.num.orEmpty(),
+                            onClick = {
+                                navController.navigate("Chat?Id=$index")
+                            })
+                    }
                 }
 
+            }
 
-            BottomAppBar {
-                IconButton(onClick = {navController.navigate("Settings")}){Icon(Icons.Filled.Settings, "Settings")}
+
+//
+//            BottomAppBar {
+//                IconButton(onClick = {navController.navigate("Settings")}){Icon(Icons.Filled.Settings, "Settings")}
+//            }
             }
         }
-    }
+
 
 
     fun connectWebSocket(userInfo: MutableState<User>): Boolean {
@@ -233,7 +257,7 @@ class MainActivity : ComponentActivity() {
                     onClick = {
                         if (login(email, password)) {
                             navController.navigate("Main")
-                        } else {
+                        } else{
 
                         }
                     },

@@ -6,6 +6,7 @@ import androidx.sqlite.db.SupportSQLiteOpenHelper
 import kotlinx.coroutines.flow.Flow
 import kotlinx.parcelize.Parcelize
 import java.sql.Time
+import java.time.Instant
 import java.util.Calendar
 
 @Parcelize
@@ -26,25 +27,28 @@ data class Person(
     val name: String,
     val num: String,
     val image: String,
-    val lastAccess: Calendar
+    val lastAccess: Instant = Instant.now()
 )
 
 @Dao
 interface PersonDao {
     @Query("select * from person where id = :id")
-    fun personById(id: String): Person
+    suspend fun personById(id: String): Person
 
     @Query("select * from person order by name asc")
     fun personsAlphabetical() : Flow<List<Person>>
 
-    @Query("select * from person order by date desc")
+    @Query("select * from person order by lastAccess desc")
     fun personsRecently() : Flow<List<Person>>
 
     @Query("select COUNT(id) from person")
     fun count() : Flow<Int>
 
-    @Query("update person set lastAccess = :date where id = :id")
-    fun accessed(id: String, time: Calendar = Calendar.getInstance())
+    @Query("update person set lastAccess = :time where id = :id")
+    suspend fun accessed(id: String, time: Instant = Instant.now())
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(vararg persons: Person)
 }
 
 @Entity
@@ -53,20 +57,33 @@ data class Message(
     val sender: String,
     val self: Boolean,
     val message: String,
-    val time: Calendar
+    val time: Instant = Instant.now()
 )
 
 @Dao
 interface MessageDao {
-    @Query("select * from message where id = :id order by time desc")
+    @Query("select * from message where sender = :id order by time desc")
     fun messagesById(id: String): Flow<List<Message>>
-    @Insert
-    fun insert(message: Message)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(message: Message)
 
 }
 
-@Database(version = 0)
+@Database(version = 1, entities = [Message::class, Person::class], exportSchema = false)
+@TypeConverters(Convert::class)
 abstract class DataBase : RoomDatabase() {
     abstract fun messageDao() : MessageDao
     abstract fun personDao() : PersonDao
+}
+
+@ProvidedTypeConverter
+class Convert {
+    @TypeConverter
+    fun InstantToLong(instant: Instant): Long {
+        return instant.epochSecond
+    }
+    @TypeConverter
+    fun LongToInstant(long: Long): Instant {
+        return Instant.ofEpochSecond(long)
+    }
 }
