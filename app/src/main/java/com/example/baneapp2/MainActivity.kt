@@ -23,6 +23,7 @@ import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -37,6 +38,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.room.Room
+import com.example.baneapp2.settingstore.StoreUserSettings
 import com.example.baneapp2.ui.theme.Baneapp2Theme
 import kotlinx.coroutines.*
 import okhttp3.*
@@ -120,13 +122,27 @@ class MainActivity : ComponentActivity() {
         var tekstkleurtekst by remember{mutableStateOf("A7A7A7")}
         var achtergrondkleurtekst by remember{mutableStateOf("373737")}
         var voorgrondkleurtekst by remember{mutableStateOf("272727")}
-        var tekstkleur: String = "0xFFA7A7A7"
-        var achtergrondkleur: String = "0xFF373737"
-        var voorgrondkleur: String = "0xFF272727"
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+        val dataStore = StoreUserSettings(context)
+        val tekstkleur = dataStore.getTextColor.collectAsState(initial = "")
+        val achtergrondkleur = dataStore.getBGColor.collectAsState(initial = "")
+        val voorgrondkleur = dataStore.getFGColor.collectAsState(initial = "")
+        if(tekstkleur.toString() != "") {
+            tekstkleurtekst = tekstkleur.toString()
+            achtergrondkleurtekst = achtergrondkleur.toString()
+            voorgrondkleurtekst = voorgrondkleur.toString()
+        }
+        var tekstkleurkleur: String = "0xFF" + tekstkleurtekst
+        var achtergrondkleurkleur: String = "0xFF"+ achtergrondkleurtekst
+        var vooorgrondkleurkleur: String = "0xFF" + voorgrondkleurtekst
+
+
 
 
         Scaffold(topBar = {
             TopAppBar(
+                backgroundColor=Color(vooorgrondkleurkleur.toInt()),
                 navigationIcon = {
                     IconButton(onClick = {
                         navController.navigateUp()
@@ -135,13 +151,16 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 title = {
-                    Text(text = "Instellingen")
+                    Text(text = "Instellingen", color = Color(tekstkleurkleur.toInt()))
                 },
                 actions = {
                     IconButton(onClick = {
-                        tekstkleur = "0xFF" + tekstkleurtekst
-                        achtergrondkleur = "0xFF" + achtergrondkleurtekst
-                        voorgrondkleur = "0xFF" + voorgrondkleurtekst
+                        scope.launch {
+                            dataStore.saveBGColor(achtergrondkleurtekst)
+                            dataStore.saveFGColor(voorgrondkleurtekst)
+                            dataStore.saveTextColor(tekstkleurtekst)
+
+                        }
 
                     }) {
                         Icon(Icons.Filled.Save, "Save Changes")
@@ -152,19 +171,19 @@ class MainActivity : ComponentActivity() {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color(0xFF373737))
+                        .background(Color(achtergrondkleurkleur.toInt()))
                         .padding(it)
                 ) {
                     Row(modifier = Modifier) {
-                        Text(text = "Tekstkleur:")
+                        Text(text = "Tekstkleur:", color = Color(tekstkleurkleur.toInt()))
                         SingleLineInput(tekstkleurtekst, {tekstkleurtekst = it})
                     }
                     Row(modifier = Modifier) {
-                        Text(text = "Voorgrondkleur:")
+                        Text(text = "Voorgrondkleur:", color = Color(tekstkleurkleur.toInt()))
                         SingleLineInput(voorgrondkleurtekst, {voorgrondkleurtekst = it})
                     }
                     Row(modifier = Modifier) {
-                        Text(text = "Achtergrondkleur: ")
+                        Text(text = "Achtergrondkleur: ", color = Color(tekstkleurkleur.toInt()))
                         SingleLineInput(achtergrondkleurtekst, {achtergrondkleurtekst = it})
                     }
                 }
@@ -189,7 +208,9 @@ class MainActivity : ComponentActivity() {
                 )
         }) {
 
-            Box(modifier = Modifier.padding(it).fillMaxSize()) {
+            Box(modifier = Modifier
+                .padding(it)
+                .fillMaxSize()) {
                 SingleLineInput(
                     value = name,
                     modifier = Modifier.align(Alignment.Center),
@@ -263,7 +284,9 @@ class MainActivity : ComponentActivity() {
                     Text(text = contact?.name.orEmpty())
                 })
         }) {
-            Column(modifier = Modifier.fillMaxSize().padding(it)) {
+            Column(modifier = Modifier
+                .fillMaxSize()
+                .padding(it)) {
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
@@ -322,7 +345,9 @@ class MainActivity : ComponentActivity() {
             Row(modifier = Modifier.padding(it)) {
 
 
-                LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                LazyColumn(modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp)) {
                     items(recent_persons.count()) { index ->
                         ChatItem(
                             name = recent_persons[index].name,
