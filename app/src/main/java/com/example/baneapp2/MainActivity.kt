@@ -142,6 +142,7 @@ class MainActivity : ComponentActivity() {
                         tekstkleur = "0xFF" + tekstkleurtekst
                         achtergrondkleur = "0xFF" + achtergrondkleurtekst
                         voorgrondkleur = "0xFF" + voorgrondkleurtekst
+
                     }) {
                         Icon(Icons.Filled.Save, "Save Changes")
                     }
@@ -266,7 +267,7 @@ class MainActivity : ComponentActivity() {
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(8.dp),
+                        .padding(4.dp),
                     reverseLayout = true
                 ) {
                     items(messageList.count()) { Message ->
@@ -290,7 +291,10 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = {
-                        sendAndStoreMessage(value, id)
+                        if(value != "") {
+                            sendAndStoreMessage(value, id)
+                            value = ""
+                        }
                     }) {
                         Icon(Icons.Filled.Send, contentDescription = "Send")
                     }
@@ -688,7 +692,7 @@ fun MessageCard(message: String, name: String,  pfp: Painter , tijd: String) {
         elevation = 5.dp,
         backgroundColor = Color(0xFF373737)
     ) {
-        Column(Modifier.padding(8.dp)) {
+        Column(Modifier.padding(4.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -696,14 +700,14 @@ fun MessageCard(message: String, name: String,  pfp: Painter , tijd: String) {
                     pfp,
                     contentDescription = null,
                     modifier = Modifier
-                        .size(80.dp)
-                        .padding(8.dp),
+                        .size(30.dp)
+                        .padding(4.dp),
                     contentScale = ContentScale.Fit,
                 )
                 Row(Modifier.padding(8.dp)) {
                     Text(
                         text = name,
-                        style = MaterialTheme.typography.h4,
+                        style = MaterialTheme.typography.h6,
 
                     )
 
@@ -719,7 +723,7 @@ fun MessageCard(message: String, name: String,  pfp: Painter , tijd: String) {
             Text(
                 text = message,
                 style = MaterialTheme.typography.body1,
-                modifier = Modifier.padding(8.dp)
+                modifier = Modifier.padding(4.dp)
             )
         }
     }
