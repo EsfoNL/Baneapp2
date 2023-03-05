@@ -1,7 +1,9 @@
 package com.example.baneapp2
 
+import android.app.Service
+import android.content.*
 import android.os.Bundle
-import android.util.JsonReader
+import android.os.IBinder
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -22,15 +24,15 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.*
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.toColorInt
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -38,56 +40,65 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.room.Room
-import com.example.baneapp2.settingstore.StoreUserSettings
+import com.example.baneapp2.settings.Settings
 import com.example.baneapp2.ui.theme.Baneapp2Theme
 import kotlinx.coroutines.*
 import okhttp3.*
-import okio.ByteString
 import org.json.JSONObject
-import java.nio.charset.Charset
 import java.util.*
-import java.sql.Time
-import java.sql.Timestamp
-import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
-import java.util.Calendar
-import java.util.Random
-import kotlin.coroutines.coroutineContext
 
 class MainActivity : ComponentActivity() {
 
-
-    val okHttpClient = OkHttpClient()
-    var websocket: WebSocket? = null
-    lateinit var dataBase: DataBase
-    lateinit var user: MutableState<User>
+    var websocketService: MutableState<WebsocketService?> = mutableStateOf(null)
+    var dataBase: DataBase? = null
     lateinit var navController: NavHostController
+    lateinit var settings: Settings
+    lateinit var sharedPreferences: SharedPreferences
+    private val okHttpClient = OkHttpClient()
+
+    private var connection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            if (service is WebsocketService.LocalBinder) {
+                websocketService.value = service.getServiceClass()
+                dataBase = service.getDataBase()
+            }
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            websocketService.value = null
+            dataBase = null
+        }
+    }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        dataBase = Room.databaseBuilder(applicationContext, DataBase::class.java, "db").addTypeConverter(Convert()).build()
-
+        sharedPreferences = getPreferences(Context.MODE_PRIVATE)
+        settings = Settings(applicationContext.getSharedPreferences("Settings", MODE_PRIVATE))
+        startService(Intent(this, WebsocketService::class.java))
+        bindService(
+            Intent(this, WebsocketService::class.java),
+            connection,
+            Context.BIND_AUTO_CREATE
+        )
+        websocketService.value?.connectWebSocket()
         setContent {
-
-            user = remember { mutableStateOf(User(getSharedPreferences("User", MODE_PRIVATE))) }
-            Log.e("onCreate", user.value.toString())
             navController = rememberNavController()
-            Baneapp2Theme(colors = darkColors()) {
+            Baneapp2Theme(settings) {
                 // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background
                 ) {
                     NavHost(
                         navController = navController,
-                        startDestination = if (user.value.token != null) "Main" else "Login"
+                        startDestination = if (settings.token != null) "Main" else "Login"
                     ) {
                         composable("Login") { Login() }
                         composable("Register") { Register() }
                         composable("Main") {
-                            if (websocket != null) {
-                              Main()
-                            } else if (connectWebSocket()) {
+                            if (websocketService.value != null) {
                                 Main()
                             } else {
                                 navController.navigate("Login") {
@@ -95,7 +106,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
-                        composable("Settings"){Settings()}
+                        composable("Settings") { Settings() }
                         composable(
                             "Chat/{id}",
                             arguments = listOf(navArgument("id") { type = NavType.StringType })
@@ -114,35 +125,38 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        user.value.save(getSharedPreferences("User", MODE_PRIVATE));
+        settings.save(sharedPreferences);
+        unbindService(connection)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        bindService(Intent(this, WebsocketService::class.java), connection, BIND_AUTO_CREATE)
     }
 
     @Composable
-    fun Settings(){
-        var tekstkleurtekst by remember{mutableStateOf("A7A7A7")}
-        var achtergrondkleurtekst by remember{mutableStateOf("373737")}
-        var voorgrondkleurtekst by remember{mutableStateOf("272727")}
-        val context = LocalContext.current
-        val scope = rememberCoroutineScope()
-        val dataStore = StoreUserSettings(context)
-        val tekstkleur = dataStore.getTextColor.collectAsState(initial = "")
-        val achtergrondkleur = dataStore.getBGColor.collectAsState(initial = "")
-        val voorgrondkleur = dataStore.getFGColor.collectAsState(initial = "")
-        if(tekstkleur.toString() != "") {
-            tekstkleurtekst = tekstkleur.toString()
-            achtergrondkleurtekst = achtergrondkleur.toString()
-            voorgrondkleurtekst = voorgrondkleur.toString()
+    fun Settings() {
+        val default = darkColors()
+        var tekstkleurtekst by remember {
+
+            mutableStateOf(
+                "#" + String.format("%06X", Settings.DEFAULT.text_color.value.toArgb()).takeLast(6)
+            )
         }
-        var tekstkleurkleur: String = "0xFF" + tekstkleurtekst
-        var achtergrondkleurkleur: String = "0xFF"+ achtergrondkleurtekst
-        var vooorgrondkleurkleur: String = "0xFF" + voorgrondkleurtekst
-
-
-
+        var achtergrondkleurtekst by remember {
+            mutableStateOf(
+                "#" + String.format("%06X", Settings.DEFAULT.bg_color.value.toArgb()).takeLast(6)
+            )
+        }
+        var voorgrondkleurtekst by remember {
+            mutableStateOf(
+                "#" + String.format("%06X", Settings.DEFAULT.fg_color.value.toArgb()).takeLast(6)
+            )
+        }
+        var error by remember { mutableStateOf(false) }
 
         Scaffold(topBar = {
             TopAppBar(
-                backgroundColor=Color(vooorgrondkleurkleur.toInt()),
                 navigationIcon = {
                     IconButton(onClick = {
                         navController.navigateUp()
@@ -151,42 +165,45 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 title = {
-                    Text(text = "Instellingen", color = Color(tekstkleurkleur.toInt()))
+                    Text(text = "Instellingen")
                 },
                 actions = {
                     IconButton(onClick = {
-                        scope.launch {
-                            dataStore.saveBGColor(achtergrondkleurtekst)
-                            dataStore.saveFGColor(voorgrondkleurtekst)
-                            dataStore.saveTextColor(tekstkleurtekst)
-
+                        try {
+                            settings.bg_color.value = Color(achtergrondkleurtekst.toColorInt())
+                            settings.fg_color.value = Color(voorgrondkleurtekst.toColorInt())
+                            settings.text_color.value = Color(tekstkleurtekst.toColorInt())
+                            error = false
+                        } catch (e: Throwable) {
+                            error = true
                         }
-
                     }) {
                         Icon(Icons.Filled.Save, "Save Changes")
                     }
                 }
             )
         }) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(achtergrondkleurkleur.toInt()))
-                        .padding(it)
-                ) {
-                    Row(modifier = Modifier) {
-                        Text(text = "Tekstkleur:", color = Color(tekstkleurkleur.toInt()))
-                        SingleLineInput(tekstkleurtekst, {tekstkleurtekst = it})
-                    }
-                    Row(modifier = Modifier) {
-                        Text(text = "Voorgrondkleur:", color = Color(tekstkleurkleur.toInt()))
-                        SingleLineInput(voorgrondkleurtekst, {voorgrondkleurtekst = it})
-                    }
-                    Row(modifier = Modifier) {
-                        Text(text = "Achtergrondkleur: ", color = Color(tekstkleurkleur.toInt()))
-                        SingleLineInput(achtergrondkleurtekst, {achtergrondkleurtekst = it})
-                    }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(it)
+            ) {
+                Row(modifier = Modifier) {
+                    Text(text = "Tekstkleur:")
+                    SingleLineInput(tekstkleurtekst, { tekstkleurtekst = it })
                 }
+                Row(modifier = Modifier) {
+                    Text(text = "Voorgrondkleur:")
+                    SingleLineInput(voorgrondkleurtekst, { voorgrondkleurtekst = it })
+                }
+                Row(modifier = Modifier) {
+                    Text(text = "Achtergrondkleur: ")
+                    SingleLineInput(achtergrondkleurtekst, { achtergrondkleurtekst = it })
+                }
+                if (error) {
+                    Text(text = "Error occured", color = MaterialTheme.colors.error)
+                }
+            }
 
 
         }
@@ -205,22 +222,24 @@ class MainActivity : ComponentActivity() {
                         Icon(Icons.Filled.ArrowBack, "Back to Main")
                     }
                 }
-                )
+            )
         }) {
 
-            Box(modifier = Modifier
-                .padding(it)
-                .fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .padding(it)
+                    .fillMaxSize()
+            ) {
                 SingleLineInput(
                     value = name,
                     modifier = Modifier.align(Alignment.Center),
-                    onValueChange = {name = it},
+                    onValueChange = { name = it },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
                         MainScope().launch(Dispatchers.IO) {
                             val id = addPerson(name)
                             Log.e("AddPerson", id.toString())
-                            if (id != null){
+                            if (id != null) {
                                 withContext(Dispatchers.Main) {
                                     navController.navigate("Chat/$id")
                                 }
@@ -232,42 +251,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    suspend fun addPerson(name: String): String? {
-        try {
-            val (name_split, num) = name.split('#')
-            val id = okHttpClient.newCall(Request.Builder().url("https://esfokk.nl/api/v0/query_name").header("name", name).build()).execute().body?.string()
-            Log.e("AddPerson", id.toString())
-            return if (id != null && id != "") {
-                dataBase.personDao().insert(
-                    Person(
-                        id,
-                        name_split,
-                        num,
-                        "",
-                    )
-                )
-                id
-            } else {
-                null
-            }
-        } catch (e: Throwable) {
-            Log.e("addPerson", e.toString())
-            return null
-        }
-    }
-
 
     @Composable
     fun Chat(id: String) {
         //var contactNaam: String by dataBase.PersonDao()
         val contact by produceState<Person?>(null) {
-            value = dataBase.personDao().personById(id)
+            value = dataBase?.personDao()?.personById(id)
         }
         val MessageModifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF373737))
             .padding(8.dp)
-        val messageList by dataBase.messageDao().messagesById(id).collectAsState(listOf())
+        val messageList = dataBase?.messageDao()?.messagesById(id)?.collectAsState(listOf())?.value
 
 
 
@@ -284,26 +279,34 @@ class MainActivity : ComponentActivity() {
                     Text(text = contact?.name.orEmpty())
                 })
         }) {
-            Column(modifier = Modifier
-                .fillMaxSize()
-                .padding(it)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(it)
+            ) {
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
                         .padding(4.dp),
                     reverseLayout = true
                 ) {
-                    items(messageList.count()) { Message ->
-                        val (pfp, naam) = if (messageList[Message].self) {
-                            Pair(painterResource(R.drawable.subpicture), user.value.name)
-                        } else {
-                            Pair(painterResource(R.drawable.subpictureother), contact?.name.orEmpty())
+                    if (messageList != null) {
+                        items(messageList.count()) { Message ->
+                            val (pfp, naam) = if (messageList[Message].self) {
+                                Pair(painterResource(R.drawable.subpicture), settings.name)
+                            } else {
+                                Pair(
+                                    painterResource(R.drawable.subpictureother),
+                                    contact?.name.orEmpty()
+                                )
+                            }
+                            val tijddatum =
+                                LocalDateTime.ofInstant(messageList[Message].time, ZoneOffset.UTC)
+                            val tijd =
+                                tijddatum.getHour().toString() + ":" + tijddatum.getMinute()
+                                    .toString()
+                            MessageCard(messageList[Message].message, naam, pfp, tijd)
                         }
-                        val tijddatum =
-                            LocalDateTime.ofInstant(messageList[Message].time, ZoneOffset.UTC)
-                        val tijd =
-                            tijddatum.getHour().toString() + ":" + tijddatum.getMinute().toString()
-                        MessageCard(messageList[Message].message, naam, pfp, tijd)
                     }
                 }
                 Row {
@@ -314,8 +317,8 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = {
-                        if(value != "") {
-                            sendAndStoreMessage(value, id)
+                        if (value != "") {
+                            websocketService.value?.sendAndStoreMessage(value, id)
                             value = ""
                         }
                     }) {
@@ -330,63 +333,43 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun Main() {
-        val recent_persons by dataBase.personDao().personsRecently().collectAsState(listOf())
+        val recent_persons = dataBase?.personDao()?.personsRecently()?.collectAsState(listOf())?.value
 
         Scaffold(
-            bottomBar = { BottomNavigation() {
-                IconButton(onClick = {
-                    navController.navigate("AddPerson")
-                }) { Icon(Icons.Filled.Add, "Settings") }
-                IconButton(onClick = {
-                    navController.navigate("Settings")
-                }) { Icon(Icons.Filled.Settings, "Settings") }
-            } }
+            bottomBar = {
+                BottomNavigation() {
+                    IconButton(onClick = {
+                        navController.navigate("AddPerson")
+                    }) { Icon(Icons.Filled.Add, "Settings") }
+                    IconButton(onClick = {
+                        navController.navigate("Settings")
+                    }) { Icon(Icons.Filled.Settings, "Settings") }
+                }
+            }
         ) {
             Row(modifier = Modifier.padding(it)) {
 
 
-                LazyColumn(modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp)) {
-                    items(recent_persons.count()) { index ->
-                        ChatItem(
-                            name = recent_persons[index].name,
-                            num = recent_persons[index].num,
-                            onClick = {
-                                navController.navigate("Chat/${recent_persons[index].id}")
-                            })
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp)
+                ) {
+                    if (recent_persons != null) {
+                        items(recent_persons.count()) { index ->
+                            ChatItem(
+                                name = recent_persons[index].name,
+                                num = recent_persons[index].num,
+                                onClick = {
+                                    navController.navigate("Chat/${recent_persons[index].id}")
+                                })
+                        }
                     }
                 }
             }
         }
     }
 
-    fun sendAndStoreMessage(message: String, id: String) {
-        try {
-            websocket?.send(
-                JSONObject().put("type", "Message").put("message", message).put("receiver", id)
-                    .toString()
-            )
-        } catch (e: Throwable) {
-            return Unit
-        }
-        MainScope().launch {
-            dataBase.messageDao().insert(Message(user.value.id, true, message));
-        }
-    }
-
-    fun connectWebSocket(): Boolean {
-        val token = user.value.token
-        return if (token != null) {
-            websocket = okHttpClient.newWebSocket(
-                request = Request.Builder().addHeader("Id", user.value.id).addHeader("Token", token).url("wss://esfokk.nl/api/v0/ws").build(),
-                listener = WsListener()
-            )
-            true
-        } else {
-            false
-        }
-    }
 
     @Composable
     fun Login() {
@@ -469,33 +452,36 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    fun login(email: String, password: String): Boolean {
-            try {
-                val body = okHttpClient.newCall(
-                    Request.Builder().get()
-                        .addHeader("email", email)
-                        .addHeader("password", password)
-                        .url("https://esfokk.nl/api/v0/login")
-                        .build()
-                ).execute().body?.string() ?: "{}"
-                Log.e("Login", body)
-                val json = JSONObject(
-                    body
-                )
-                Log.e("Login", json.toString())
-                user.value = User(
-                    json.getString("token"),
-                    json.getString("name"),
-                    json.getString("num"),
-                    json.getString("id"),
-                    email,
-                    json.getString("refresh_token")
-                );
-            } catch (e: Throwable) {
-                Log.e("Login", e.toString())
-                return false
-            }
-            return true
+    fun login(providedEmail: String, password: String): Boolean {
+        try {
+            val body = okHttpClient.newCall(
+                Request.Builder().get()
+                    .addHeader("email", providedEmail)
+                    .addHeader("password", password)
+                    .url("https://esfokk.nl/api/v0/login")
+                    .build()
+            ).execute().body?.string() ?: "{}"
+            Log.e("Login", body)
+            val json = JSONObject(
+                body
+            )
+            Log.e("Login", json.toString())
+            settings.apply {
+                token = json.getString("token")
+                name = json.getString("name")
+                num = json.getString("num")
+                id = json.getString("id")
+                email = providedEmail
+                refresh_token = json.getString("refresh_token")
+            };
+            settings.save(getSharedPreferences("Settings", MODE_PRIVATE))
+            websocketService.value?.settings = settings
+            websocketService.value?.connectWebSocket()
+        } catch (e: Throwable) {
+            Log.e("Login", e.toString())
+            return false
+        }
+        return true
     }
 
     @Composable
@@ -551,7 +537,7 @@ class MainActivity : ComponentActivity() {
                     { password = it },
                     modifier = Modifier.align(Alignment.CenterHorizontally),
 
-                )
+                    )
 
                 Button(
                     onClick = {
@@ -563,7 +549,8 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
-                        }},
+                        }
+                    },
                     content = { Text("Register", style = MaterialTheme.typography.h5) },
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
@@ -576,55 +563,44 @@ class MainActivity : ComponentActivity() {
 
     fun register(name: String, email: String, password: String): Boolean {
         return try {
-            okHttpClient.newCall(Request.Builder().url("https://esfokk.nl/api/v0/register").header("name", name).header("email", email).header("password", password).build()).execute().isSuccessful
+            okHttpClient.newCall(
+                Request.Builder().url("https://esfokk.nl/api/v0/register").header("name", name)
+                    .header("email", email).header("password", password).build()
+            ).execute().isSuccessful
         } catch (e: Throwable) {
             false
         }
     }
 
-
-    inner class WsListener : WebSocketListener() {
-
-        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            super.onClosed(webSocket, code, reason)
-            if (!connectWebSocket()) {
-                Log.e("Websocket onClosed", reason.toString())
-            }
-
-        }
-
-        override fun onOpen(webSocket: WebSocket, response: Response) {
-            super.onOpen(webSocket, response)
-            Log.e("Websocket onOpen", response.toString())
-        }
-
-        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            super.onFailure(webSocket, t, response)
-            Log.e("Websocket onFailure", t.toString() + ' ' + response?.body.toString())
-        }
-
-        override fun onMessage(webSocket: WebSocket, text: String) {
-            super.onMessage(webSocket, text)
-            MainScope().launch(Dispatchers.IO) {
-                try {
-                    val json = JSONObject(text)
-                    val message = Message(
-                        sender = json.getString("sender"),
-                        self = false,
-                        message = json.getString("message")
+    suspend fun addPerson(name: String): String? {
+            try {
+                val (name_split, num) = name.split('#')
+                val id = okHttpClient.newCall(
+                    Request.Builder().url("https://esfokk.nl/api/v0/query_name")
+                        .header("name", name).build()
+                ).execute().body?.string()
+                Log.e("AddPerson", id.toString())
+                return if (id != null && id != "") {
+                    dataBase?.personDao()?.insert(
+                        Person(
+                            id,
+                            name_split,
+                            num,
+                            "",
+                        )
                     )
-                    Log.e("Websocket onMessage", message.toString())
-                    dataBase.messageDao().insert(
-                        message
-                    )
-                } catch (e: Throwable) {
-                    Log.e("Websocket onMessage", e.toString())
+                    id
+                } else {
+                    null
                 }
+            } catch (e: Throwable) {
+                Log.e("addPerson", e.toString())
+                return null
             }
-        }
     }
-}
 
+
+}
 
 @Composable
 fun SingleLineInput(
@@ -679,21 +655,21 @@ fun PasswordField(
     )
 }
 
-@Preview
-@Composable
-fun ChatItemPreview() {
-    var messagelijsttest = mutableListOf<Message> (Message("hello", true, "woef", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()))
-    //var testuserinfo = mutableStateOf<>(useri)
-
-    Baneapp2Theme {
-        //MessageCard("Dit is een testbericht OwO", "Username", painterResource(R.drawable.subpicture), "4:23")
-        //chatu(messagelijsttest)
-        Chattest(messagelijsttest)
-    }
-
-
-
-}
+//@Preview
+//@Composable
+//fun ChatItemPreview() {
+//    var messagelijsttest = mutableListOf<Message> (Message("hello", true, "woef", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()))
+//    //var testuserinfo = mutableStateOf<>(useri)
+//
+//    Baneapp2Theme {
+//        //MessageCard("Dit is een testbericht OwO", "Username", painterResource(R.drawable.subpicture), "4:23")
+//        //chatu(messagelijsttest)
+//        Chattest(messagelijsttest)
+//    }
+//
+//
+//
+//}
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable

@@ -1,11 +1,10 @@
 package com.example.baneapp2.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material.Colors
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.darkColors
 import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
+import com.example.baneapp2.settings.Settings
 
 private val DarkColorPalette = darkColors(
     primary = Purple200,
@@ -29,8 +28,13 @@ private val LightColorPalette = lightColors(
 )
 
 @Composable
-fun Baneapp2Theme(darkTheme: Boolean = isSystemInDarkTheme(), colors: Colors = darkColors(), content: @Composable () -> Unit) {
-
+fun Baneapp2Theme(settings: Settings, content: @Composable () -> Unit) {
+    val colors = darkColors(
+        background = settings.bg_color.value,
+        surface = settings.fg_color.value,
+        onBackground = settings.text_color.value,
+        onSurface = settings.text_color.value
+    )
 
     MaterialTheme(
         colors = colors,

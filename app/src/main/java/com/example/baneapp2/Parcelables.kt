@@ -10,35 +10,6 @@ import java.sql.Time
 import java.time.Instant
 import java.util.Calendar
 
-class User(
-    var token: String?,
-    var name: String,
-    var num: String,
-    var id: String,
-    var email: String,
-    var refresh_token: String?
-    ) {
-    fun save(sharedPreferences: SharedPreferences) {
-        val editor = sharedPreferences.edit();
-        editor.putString("token", token)
-        editor.putString("name", name)
-        editor.putString("num", num)
-        editor.putString("id", id)
-        editor.putString("email", email)
-        editor.putString("refresh_token", refresh_token)
-        editor.apply()
-    }
-
-    constructor() : this(null, "", "", "", "", null)
-        constructor(sharedPreferences: SharedPreferences) : this() {
-            token = sharedPreferences.getString("token", null);
-            name = sharedPreferences.getString("name", "")!!;
-            num = sharedPreferences.getString("num", "")!!;
-            id = sharedPreferences.getString("id", "")!!;
-            email = sharedPreferences.getString("email", "")!!;
-            refresh_token = sharedPreferences.getString("refresh_token", null);
-        }
-    }
 
 @Entity
 data class Person(
