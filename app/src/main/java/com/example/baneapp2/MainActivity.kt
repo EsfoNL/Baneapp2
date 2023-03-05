@@ -1,5 +1,7 @@
 package com.example.baneapp2
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.*
 import android.os.Bundle
@@ -32,6 +34,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationChannelCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.graphics.toColorInt
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -52,37 +56,59 @@ import java.time.ZoneOffset
 class MainActivity : ComponentActivity() {
 
     var websocketService: MutableState<WebsocketService?> = mutableStateOf(null)
-    var dataBase: DataBase? = null
+    var dataBase: MutableState<DataBase?> = mutableStateOf(null)
     lateinit var navController: NavHostController
     lateinit var settings: Settings
     lateinit var sharedPreferences: SharedPreferences
     private val okHttpClient = OkHttpClient()
+    lateinit var notificationManagerCompat: NotificationManagerCompat
 
     private var connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             if (service is WebsocketService.LocalBinder) {
-                websocketService.value = service.getServiceClass()
-                dataBase = service.getDataBase()
+                val notificationChannel = NotificationChannelCompat.Builder(
+                    WebsocketService.CHANNEL_ID,
+                    NotificationManagerCompat.IMPORTANCE_DEFAULT).setDescription("BaneApp").setName("BaneApp").build()
+                notificationManagerCompat.createNotificationChannel(notificationChannel)
+                val tempClass = service.getServiceClass()
+                dataBase.value = service.getDataBase()
+                tempClass.settings = settings
+                tempClass.notificationManagerCompat
+                websocketService.value = tempClass
+                tempClass.connectWebSocket()
             }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             websocketService.value = null
-            dataBase = null
+            dataBase.value = null
         }
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        if (hasFocus) {
+            bindService(
+                Intent(this, WebsocketService::class.java),
+                connection,
+                Context.BIND_AUTO_CREATE)
+        } else {
+            unbindService(connection)
+        }
+        super.onWindowFocusChanged(hasFocus)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        notificationManagerCompat = NotificationManagerCompat.from(applicationContext)
         super.onCreate(savedInstanceState)
         sharedPreferences = getPreferences(Context.MODE_PRIVATE)
-        settings = Settings(applicationContext.getSharedPreferences("Settings", MODE_PRIVATE))
+        settings = Settings(sharedPreferences)
         startService(Intent(this, WebsocketService::class.java))
         bindService(
             Intent(this, WebsocketService::class.java),
             connection,
             Context.BIND_AUTO_CREATE
         )
+        Log.e("settings", settings.token.toString())
         websocketService.value?.connectWebSocket()
         setContent {
             navController = rememberNavController()
@@ -98,13 +124,9 @@ class MainActivity : ComponentActivity() {
                         composable("Login") { Login() }
                         composable("Register") { Register() }
                         composable("Main") {
-                            if (websocketService.value != null) {
+
                                 Main()
-                            } else {
-                                navController.navigate("Login") {
-                                    this.popUpTo("Login")
-                                }
-                            }
+
                         }
                         composable("Settings") { Settings() }
                         composable(
@@ -126,12 +148,14 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         settings.save(sharedPreferences);
-        unbindService(connection)
+    }
+
+    override fun onStop() {
+        super.onStop()
     }
 
     override fun onResume() {
         super.onResume()
-        bindService(Intent(this, WebsocketService::class.java), connection, BIND_AUTO_CREATE)
     }
 
     @Composable
@@ -256,13 +280,13 @@ class MainActivity : ComponentActivity() {
     fun Chat(id: String) {
         //var contactNaam: String by dataBase.PersonDao()
         val contact by produceState<Person?>(null) {
-            value = dataBase?.personDao()?.personById(id)
+            value = dataBase.value?.personDao()?.personById(id)
         }
         val MessageModifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF373737))
             .padding(8.dp)
-        val messageList = dataBase?.messageDao()?.messagesById(id)?.collectAsState(listOf())?.value
+        val messageList = dataBase.value?.messageDao()?.messagesById(id)?.collectAsState(listOf())?.value
 
 
 
@@ -333,7 +357,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun Main() {
-        val recent_persons = dataBase?.personDao()?.personsRecently()?.collectAsState(listOf())?.value
+        val recent_persons = dataBase.value?.personDao()?.personsRecently()?.collectAsState(listOf())?.value
 
         Scaffold(
             bottomBar = {
@@ -341,6 +365,7 @@ class MainActivity : ComponentActivity() {
                     IconButton(onClick = {
                         navController.navigate("AddPerson")
                     }) { Icon(Icons.Filled.Add, "Settings") }
+                    Text(settings.name + "#" + settings.num)
                     IconButton(onClick = {
                         navController.navigate("Settings")
                     }) { Icon(Icons.Filled.Settings, "Settings") }
@@ -474,7 +499,7 @@ class MainActivity : ComponentActivity() {
                 email = providedEmail
                 refresh_token = json.getString("refresh_token")
             };
-            settings.save(getSharedPreferences("Settings", MODE_PRIVATE))
+            settings.save(sharedPreferences);
             websocketService.value?.settings = settings
             websocketService.value?.connectWebSocket()
         } catch (e: Throwable) {
@@ -581,7 +606,7 @@ class MainActivity : ComponentActivity() {
                 ).execute().body?.string()
                 Log.e("AddPerson", id.toString())
                 return if (id != null && id != "") {
-                    dataBase?.personDao()?.insert(
+                    dataBase.value?.personDao()?.insert(
                         Person(
                             id,
                             name_split,

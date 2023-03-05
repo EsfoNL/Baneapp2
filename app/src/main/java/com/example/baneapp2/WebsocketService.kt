@@ -1,29 +1,50 @@
 package com.example.baneapp2
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import androidx.annotation.RequiresApi
+import androidx.core.app.NotificationChannelCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.NotificationManagerCompat.IMPORTANCE_DEFAULT
+import androidx.core.app.NotificationManagerCompat.from
 import androidx.core.content.withStyledAttributes
 import androidx.room.Room
 import com.example.baneapp2.settings.Settings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import okhttp3.*
 import org.json.JSONObject
+import java.io.IOError
 
 class WebsocketService():  Service() {
+
+    companion object {
+        const val CHANNEL_ID = "BaneApp"
+    }
+
     var websocket: WebSocket? = null
-    lateinit var dataBase: DataBase
+    lateinit var dataBase: DataBase //Room.databaseBuilder(applicationContext, DataBase::class.java, "db").addTypeConverter(Convert()).build()
+
     val binder = LocalBinder()
     val okHttpClient = OkHttpClient()
     var settings: Settings? = null
     var bound = false
+    var notificationManagerCompat: NotificationManagerCompat? = null
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val res = super.onStartCommand(intent, flags, startId)
+        super.onStartCommand(intent, flags, startId)
+
         dataBase = Room.databaseBuilder(applicationContext, DataBase::class.java, "db").addTypeConverter(Convert()).build()
+
         return START_STICKY
     }
 
@@ -78,6 +99,22 @@ class WebsocketService():  Service() {
         }
     }
 
+    suspend fun updateToken() {
+        try {
+
+
+            val res = JSONObject(okHttpClient.newCall(
+                Request.Builder().url("https://esfokk.nl/api/v0/refresh")
+                    .header("id", settings?.id.orEmpty())
+                    .header("refresh_token", settings?.refresh_token.orEmpty()).build()).execute().body?.string().orEmpty())
+            settings?.token = res.getString("token")
+            settings?.refresh_token = res.getString("Token")
+        } catch (e: Throwable) {
+            settings?.token = null
+            settings?.refresh_token = null
+        }
+    }
+
 
 
     inner class WsListener : WebSocketListener() {
@@ -95,7 +132,13 @@ class WebsocketService():  Service() {
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             super.onFailure(webSocket, t, response)
             Log.e("Websocket onFailure", t.toString() + ' ' + response?.body.toString())
+            MainScope().launch(Dispatchers.IO) {
+                updateToken()
+                delay(1000)
+                connectWebSocket()
+            }
         }
+
 
         override fun onMessage(webSocket: WebSocket, text: String) {
             super.onMessage(webSocket, text)
@@ -112,7 +155,12 @@ class WebsocketService():  Service() {
                         message
                     )
                     if (!bound) {
-                        Log.e("unbound message", message.toString())
+                        val person = dataBase.personDao().personById(message.sender)
+
+                        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID).addPerson(
+                            androidx.core.app.Person.Builder().setName(person.name).build()
+                        ).setContentText(message.message).build()
+                        notificationManagerCompat?.notify(0, notification)
                     }
                 } catch (e: Throwable) {
                     Log.e("Websocket onMessage", e.toString())
