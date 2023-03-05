@@ -161,22 +161,34 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun Settings() {
         val default = darkColors()
-        var tekstkleurtekst by remember {
+        var tekstkleurtekstcheck: String
+        if(settings.text_color.value == null) {
+            tekstkleurtekstcheck = "#" + String.format("%06X", Settings.DEFAULT.text_color.value.toArgb()).takeLast(6)
+        }
+        else {
+            tekstkleurtekstcheck = "#" + String.format("%06X", settings.text_color.value.toArgb()).takeLast(6)
+        }
 
-            mutableStateOf(
-                "#" + String.format("%06X", Settings.DEFAULT.text_color.value.toArgb()).takeLast(6)
-            )
+        var bgkleurtekstcheck: String
+        if(settings.bg_color.value == null) {
+            bgkleurtekstcheck = "#" + String.format("%06X", Settings.DEFAULT.bg_color.value.toArgb()).takeLast(6)
         }
-        var achtergrondkleurtekst by remember {
-            mutableStateOf(
-                "#" + String.format("%06X", Settings.DEFAULT.bg_color.value.toArgb()).takeLast(6)
-            )
+        else {
+            bgkleurtekstcheck =
+                "#" + String.format("%06X", settings.bg_color.value.toArgb()).takeLast(6)
         }
-        var voorgrondkleurtekst by remember {
-            mutableStateOf(
-                "#" + String.format("%06X", Settings.DEFAULT.fg_color.value.toArgb()).takeLast(6)
-            )
+        var fgkleurtekstcheck: String
+        if(settings.text_color.value == null) {
+            fgkleurtekstcheck = "#" + String.format("%06X", Settings.DEFAULT.fg_color.value.toArgb()).takeLast(6)
         }
+        else {
+            fgkleurtekstcheck = "#" + String.format("%06X", settings.fg_color.value.toArgb()).takeLast(6)
+        }
+
+
+        var tekstkleurtekst by remember { mutableStateOf(tekstkleurtekstcheck) }
+        var achtergrondkleurtekst by remember { mutableStateOf(bgkleurtekstcheck) }
+        var voorgrondkleurtekst by remember { mutableStateOf(fgkleurtekstcheck) }
         var error by remember { mutableStateOf(false) }
 
         Scaffold(topBar = {
@@ -223,6 +235,22 @@ class MainActivity : ComponentActivity() {
                 Row(modifier = Modifier) {
                     Text(text = "Achtergrondkleur: ")
                     SingleLineInput(achtergrondkleurtekst, { achtergrondkleurtekst = it })
+                }
+                Button(
+                    onClick = {
+                        tekstkleurtekst = "#A7A7A7"
+                        achtergrondkleurtekst = "#373737"
+                        voorgrondkleurtekst = "#171717"
+                    },
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .size(
+                            width = TextFieldDefaults.MinWidth,
+                            height = TextFieldDefaults.MinHeight
+                        )
+                        .padding(4.dp)
+                ){
+                    Text("Change back to defaults", style = MaterialTheme.typography.body1)
                 }
                 if (error) {
                     Text(text = "Error occured", color = MaterialTheme.colors.error)
