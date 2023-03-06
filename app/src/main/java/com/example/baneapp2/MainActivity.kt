@@ -1,5 +1,7 @@
 package com.example.baneapp2
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.*
 import android.os.Bundle
@@ -32,6 +34,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationChannelCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.graphics.toColorInt
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -51,54 +55,42 @@ import java.time.ZoneOffset
 
 class MainActivity : ComponentActivity() {
 
-    var websocketService: MutableState<WebsocketService?> = mutableStateOf(null)
-    var dataBase: DataBase? = null
-    lateinit var navController: NavHostController
-    lateinit var settings: Settings
-    lateinit var sharedPreferences: SharedPreferences
-    private val okHttpClient = OkHttpClient()
 
-    private var connection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            if (service is WebsocketService.LocalBinder) {
-                websocketService.value = service.getServiceClass()
-                dataBase = service.getDataBase()
-            }
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            websocketService.value = null
-            dataBase = null
-        }
+    var tries = 0
+    companion object {
+        const val MAX_TRIES = 100
     }
 
 
+    val okHttpClient = OkHttpClient()
+    var websocket: WebSocket? = null
+    lateinit var dataBase: DataBase
+    lateinit var settings: MutableState<Settings>
+    lateinit var navController: NavHostController
+    lateinit var sharedPreferences: SharedPreferences
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        sharedPreferences = getPreferences(Context.MODE_PRIVATE)
-        settings = Settings(applicationContext.getSharedPreferences("Settings", MODE_PRIVATE))
-        startService(Intent(this, WebsocketService::class.java))
-        bindService(
-            Intent(this, WebsocketService::class.java),
-            connection,
-            Context.BIND_AUTO_CREATE
-        )
-        websocketService.value?.connectWebSocket()
+        dataBase = Room.databaseBuilder(applicationContext, DataBase::class.java, "db").addTypeConverter(Convert()).build()
+        sharedPreferences = getPreferences(MODE_PRIVATE)
+        settings = mutableStateOf(Settings(sharedPreferences))
         setContent {
             navController = rememberNavController()
-            Baneapp2Theme(settings) {
+            Baneapp2Theme(settings.value) {
                 // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background
                 ) {
                     NavHost(
                         navController = navController,
-                        startDestination = if (settings.token != null) "Main" else "Login"
+                        startDestination = if (settings.value.token != null) "Main" else "Login"
                     ) {
                         composable("Login") { Login() }
                         composable("Register") { Register() }
                         composable("Main") {
-                            if (websocketService.value != null) {
+                            if (websocket != null) {
+                              Main()
+                            } else if (connectWebSocket()) {
                                 Main()
                             } else {
                                 navController.navigate("Login") {
@@ -106,7 +98,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
-                        composable("Settings") { Settings() }
+                        composable("Settings"){Settings()}
                         composable(
                             "Chat/{id}",
                             arguments = listOf(navArgument("id") { type = NavType.StringType })
@@ -125,41 +117,30 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        settings.save(sharedPreferences);
-        unbindService(connection)
+        settings.value.save(sharedPreferences);
+    }
+
+    override fun onStop() {
+        super.onStop()
     }
 
     override fun onResume() {
         super.onResume()
-        bindService(Intent(this, WebsocketService::class.java), connection, BIND_AUTO_CREATE)
     }
 
     @Composable
     fun Settings() {
+
+
         val default = darkColors()
         var tekstkleurtekstcheck: String
-        if(settings.text_color.value == null) {
-            tekstkleurtekstcheck = "#" + String.format("%06X", Settings.DEFAULT.text_color.value.toArgb()).takeLast(6)
-        }
-        else {
-            tekstkleurtekstcheck = "#" + String.format("%06X", settings.text_color.value.toArgb()).takeLast(6)
-        }
+        tekstkleurtekstcheck = "#" + String.format("%06X", settings.value.text_color.value.toArgb()).takeLast(6)
 
         var bgkleurtekstcheck: String
-        if(settings.bg_color.value == null) {
-            bgkleurtekstcheck = "#" + String.format("%06X", Settings.DEFAULT.bg_color.value.toArgb()).takeLast(6)
-        }
-        else {
-            bgkleurtekstcheck =
-                "#" + String.format("%06X", settings.bg_color.value.toArgb()).takeLast(6)
-        }
+        bgkleurtekstcheck =
+            "#" + String.format("%06X", settings.value.bg_color.value.toArgb()).takeLast(6)
         var fgkleurtekstcheck: String
-        if(settings.text_color.value == null) {
-            fgkleurtekstcheck = "#" + String.format("%06X", Settings.DEFAULT.fg_color.value.toArgb()).takeLast(6)
-        }
-        else {
-            fgkleurtekstcheck = "#" + String.format("%06X", settings.fg_color.value.toArgb()).takeLast(6)
-        }
+        fgkleurtekstcheck = "#" + String.format("%06X", settings.value.fg_color.value.toArgb()).takeLast(6)
 
 
         var tekstkleurtekst by remember { mutableStateOf(tekstkleurtekstcheck) }
@@ -182,9 +163,9 @@ class MainActivity : ComponentActivity() {
                 actions = {
                     IconButton(onClick = {
                         try {
-                            settings.bg_color.value = Color(achtergrondkleurtekst.toColorInt())
-                            settings.fg_color.value = Color(voorgrondkleurtekst.toColorInt())
-                            settings.text_color.value = Color(tekstkleurtekst.toColorInt())
+                            settings.value.bg_color.value = Color(achtergrondkleurtekst.toColorInt())
+                            settings.value.fg_color.value = Color(voorgrondkleurtekst.toColorInt())
+                            settings.value.text_color.value = Color(tekstkleurtekst.toColorInt())
                             error = false
                         } catch (e: Throwable) {
                             error = true
@@ -279,18 +260,41 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    suspend fun addPerson(name: String): String? {
+        try {
+            val (name_split, num) = name.split('#')
+            val id = okHttpClient.newCall(Request.Builder().url("https://esfokk.nl/api/v0/query_name").header("name", name).build()).execute().body?.string()
+            Log.e("AddPerson", id.toString())
+            return if (id != null && id != "") {
+                dataBase.personDao().insert(
+                    Person(
+                        id,
+                        name_split,
+                        num,
+                        "",
+                    )
+                )
+                id
+            } else {
+                null
+            }
+        } catch (e: Throwable) {
+            Log.e("addPerson", e.toString())
+            return null
+        }
+    }
 
     @Composable
     fun Chat(id: String) {
         //var contactNaam: String by dataBase.PersonDao()
         val contact by produceState<Person?>(null) {
-            value = dataBase?.personDao()?.personById(id)
+            value = dataBase.personDao().personById(id)
         }
         val MessageModifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF373737))
             .padding(8.dp)
-        val messageList = dataBase?.messageDao()?.messagesById(id)?.collectAsState(listOf())?.value
+        val messageList by dataBase.messageDao().messagesById(id).collectAsState(listOf())
 
 
 
@@ -307,34 +311,26 @@ class MainActivity : ComponentActivity() {
                     Text(text = contact?.name.orEmpty())
                 })
         }) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(it)
-            ) {
+            Column(modifier = Modifier
+                .fillMaxSize()
+                .padding(it)) {
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
                         .padding(4.dp),
                     reverseLayout = true
                 ) {
-                    if (messageList != null) {
-                        items(messageList.count()) { Message ->
-                            val (pfp, naam) = if (messageList[Message].self) {
-                                Pair(painterResource(R.drawable.subpicture), settings.name)
-                            } else {
-                                Pair(
-                                    painterResource(R.drawable.subpictureother),
-                                    contact?.name.orEmpty()
-                                )
-                            }
-                            val tijddatum =
-                                LocalDateTime.ofInstant(messageList[Message].time, ZoneOffset.UTC)
-                            val tijd =
-                                tijddatum.getHour().toString() + ":" + tijddatum.getMinute()
-                                    .toString()
-                            MessageCard(messageList[Message].message, naam, pfp, tijd)
+                    items(messageList.count()) { Message ->
+                        val (pfp, naam) = if (messageList[Message].self) {
+                            Pair(painterResource(R.drawable.subpicture), settings.value.name)
+                        } else {
+                            Pair(painterResource(R.drawable.subpictureother), contact?.name.orEmpty())
                         }
+                        val tijddatum =
+                            LocalDateTime.ofInstant(messageList[Message].time, ZoneOffset.UTC)
+                        val tijd =
+                            tijddatum.getHour().toString() + ":" + tijddatum.getMinute().toString()
+                        MessageCard(messageList[Message].message, naam, pfp, tijd)
                     }
                 }
                 Row {
@@ -345,8 +341,8 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = {
-                        if (value != "") {
-                            websocketService.value?.sendAndStoreMessage(value, id)
+                        if(value != "") {
+                            sendAndStoreMessage(value, id)
                             value = ""
                         }
                     }) {
@@ -361,7 +357,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun Main() {
-        val recent_persons = dataBase?.personDao()?.personsRecently()?.collectAsState(listOf())?.value
+        val recent_persons by dataBase.personDao().personsRecently().collectAsState(listOf())
 
         Scaffold(
             bottomBar = {
@@ -369,6 +365,7 @@ class MainActivity : ComponentActivity() {
                     IconButton(onClick = {
                         navController.navigate("AddPerson")
                     }) { Icon(Icons.Filled.Add, "Settings") }
+                    Text(settings.value.name + "#" + settings.value.num)
                     IconButton(onClick = {
                         navController.navigate("Settings")
                     }) { Icon(Icons.Filled.Settings, "Settings") }
@@ -378,26 +375,51 @@ class MainActivity : ComponentActivity() {
             Row(modifier = Modifier.padding(it)) {
 
 
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(8.dp)
-                ) {
-                    if (recent_persons != null) {
-                        items(recent_persons.count()) { index ->
-                            ChatItem(
-                                name = recent_persons[index].name,
-                                num = recent_persons[index].num,
-                                onClick = {
-                                    navController.navigate("Chat/${recent_persons[index].id}")
-                                })
-                        }
+                LazyColumn(modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp)) {
+                    items(recent_persons.count()) { index ->
+                        ChatItem(
+                            name = recent_persons[index].name,
+                            num = recent_persons[index].num,
+                            onClick = {
+                                navController.navigate("Chat/${recent_persons[index].id}")
+                            })
                     }
                 }
             }
         }
     }
 
+    fun sendAndStoreMessage(message: String, id: String) {
+        try {
+            websocket?.send(
+                JSONObject().put("type", "Message").put("message", message).put("receiver", id.toLong())
+                    .toString()
+            )
+        } catch (e: Throwable) {
+            Log.e("sendAndStoreMessage", e.toString())
+            return Unit
+        }
+        MainScope().launch {
+            dataBase.messageDao().insert(Message(id, true, message));
+        }
+    }
+
+    fun connectWebSocket(): Boolean {
+        val token = settings.value.token
+        return if (token != null) {
+            val req = Request.Builder().addHeader("id", settings.value.id).addHeader("token", token).url("wss://esfokk.nl/api/v0/ws").build()
+            Log.d("Websocket request", req.toString())
+            websocket = okHttpClient.newWebSocket(
+                request = req,
+                listener = WsListener()
+            )
+            true
+        } else {
+            false
+        }
+    }
 
     @Composable
     fun Login() {
@@ -480,36 +502,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    fun login(providedEmail: String, password: String): Boolean {
-        try {
-            val body = okHttpClient.newCall(
-                Request.Builder().get()
-                    .addHeader("email", providedEmail)
-                    .addHeader("password", password)
-                    .url("https://esfokk.nl/api/v0/login")
-                    .build()
-            ).execute().body?.string() ?: "{}"
-            Log.e("Login", body)
-            val json = JSONObject(
-                body
-            )
-            Log.e("Login", json.toString())
-            settings.apply {
-                token = json.getString("token")
-                name = json.getString("name")
-                num = json.getString("num")
-                id = json.getString("id")
-                email = providedEmail
-                refresh_token = json.getString("refresh_token")
-            };
-            settings.save(getSharedPreferences("Settings", MODE_PRIVATE))
-            websocketService.value?.settings = settings
-            websocketService.value?.connectWebSocket()
-        } catch (e: Throwable) {
-            Log.e("Login", e.toString())
-            return false
-        }
-        return true
+    fun login(fun_email: String, password: String): Boolean {
+            try {
+                val body = okHttpClient.newCall(
+                    Request.Builder().get()
+                        .addHeader("email", fun_email)
+                        .addHeader("password", password)
+                        .url("https://esfokk.nl/api/v0/login")
+                        .build()
+                ).execute().body?.string() ?: "{}"
+                val json = JSONObject(
+                    body
+                )
+                Log.d("Login", json.toString())
+                settings.value.apply {
+                    token = json.getString("token")
+                    name = json.getString("name")
+                    num = json.getString("num")
+                    id = json.getString("id")
+                    email = fun_email
+                    json.getString("refresh_token")
+                };
+            } catch (e: Throwable) {
+                Log.e("Login", e.toString())
+                return false
+            }
+            return true
     }
 
     @Composable
@@ -600,34 +618,80 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    suspend fun addPerson(name: String): String? {
-            try {
-                val (name_split, num) = name.split('#')
-                val id = okHttpClient.newCall(
-                    Request.Builder().url("https://esfokk.nl/api/v0/query_name")
-                        .header("name", name).build()
-                ).execute().body?.string()
-                Log.e("AddPerson", id.toString())
-                return if (id != null && id != "") {
-                    dataBase?.personDao()?.insert(
-                        Person(
-                            id,
-                            name_split,
-                            num,
-                            "",
-                        )
-                    )
-                    id
-                } else {
-                    null
+
+    inner class WsListener : WebSocketListener() {
+
+
+
+        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            super.onClosed(webSocket, code, reason)
+            connectWebSocket()
+            Log.d("Websocket onClosed", reason.toString())
+        }
+
+        override fun onOpen(webSocket: WebSocket, response: Response) {
+            super.onOpen(webSocket, response)
+            Log.d("Websocket onOpen", response.toString())
+        }
+
+        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            super.onFailure(webSocket, t, response)
+            when (response?.code) {
+                410 -> {
+                    MainScope().launch(Dispatchers.IO) {
+                        refresh_tokens()
+                        connectWebSocket()
+                    }
                 }
-            } catch (e: Throwable) {
-                Log.e("addPerson", e.toString())
-                return null
+                401 -> {
+                    settings.value.token = null
+                    settings.value.refresh_token = null
+                    navController.navigate("Login")
+                }
+                else -> {
+                    connectWebSocket()
+                    Log.d("Websocket onFailure", t.toString())
+                }
             }
+        }
+
+        override fun onMessage(webSocket: WebSocket, text: String) {
+            super.onMessage(webSocket, text)
+            MainScope().launch(Dispatchers.IO) {
+                try {
+                    val json = JSONObject(text)
+                    val message = Message(
+                        sender = json.getString("sender"),
+                        self = false,
+                        message = json.getString("message")
+                    )
+                    Log.d("Websocket onMessage", message.toString())
+                    dataBase.messageDao().insert(
+                        message
+                    )
+                } catch (e: Throwable) {
+                    Log.e("Websocket onMessage", e.toString())
+                }
+            }
+        }
     }
 
-
+    private suspend fun refresh_tokens() {
+        val res = okHttpClient.newCall(Request.Builder().url("https://esfokk.nl/api/v0/refresh").header("refresh_token", settings.value.refresh_token.orEmpty()).header("id", settings.value.id).build()).execute()
+        if (res.code == 401 || res.code == 410) {
+            settings.value.apply {
+                token = null
+                refresh_token = null
+                navController.navigate("Login")
+            }
+        } else if (res.code == 200) {
+            val json = JSONObject(res.body!!.string())
+            settings.value.apply {
+                token = json.getString("token")
+                refresh_token = json.getString("refresh token")
+            }
+        }
+    }
 }
 
 @Composable

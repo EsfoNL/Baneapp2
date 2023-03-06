@@ -75,7 +75,7 @@ class Settings(
         token = sharedPreferences.getString(USER_TOKEN, DEFAULT.token);
         name = sharedPreferences.getString(USER_NAME, DEFAULT.name)!!;
         num = sharedPreferences.getString(USER_NUM, DEFAULT.num)!!;
-        id = sharedPreferences.getString(USER_NAME , DEFAULT.id)!!;
+        id = sharedPreferences.getString(USER_ID , DEFAULT.id)!!;
         email = sharedPreferences.getString("email", DEFAULT.email)!!;
         refresh_token = sharedPreferences.getString("refresh_token", DEFAULT.refresh_token);
         fg_color = mutableStateOf(Color(sharedPreferences.getInt(USER_FG_KEY, DEFAULT.fg_color.value.toArgb())))
