@@ -279,6 +279,7 @@ class MainActivity : ComponentActivity() {
                         name_split,
                         num,
                         "",
+                        false
                     )
                 )
                 id
@@ -288,6 +289,16 @@ class MainActivity : ComponentActivity() {
         } catch (e: Throwable) {
             Log.e("addPerson", e.toString())
             return null
+        }
+    }
+    fun updateFavourite(id: String, newFavourite: Boolean) {
+        try{
+            MainScope().launch(Dispatchers.IO) {
+                dataBase.personDao().favourite(id, newFavourite)
+            }
+        }
+        catch (e: Throwable) {
+            Log.e("favourite", e.toString())
         }
     }
 
@@ -303,6 +314,9 @@ class MainActivity : ComponentActivity() {
             .padding(8.dp)
         val messageList by dataBase.messageDao().messagesById(id).collectAsState(listOf())
         var star by remember { mutableStateOf(Icons.Filled.StarBorder) }
+        if(contact!!.favourite) {
+            star = Icons.Filled.Star
+        }
         val current = LocalContext.current
 
         Scaffold(topBar = {
@@ -322,10 +336,17 @@ class MainActivity : ComponentActivity() {
                         if(star == Icons.Filled.StarBorder) {
                             star = Icons.Filled.Star
                             Toast.makeText(current, "Favourite", Toast.LENGTH_SHORT).show()
+
+                                updateFavourite(id, true)
+
+
                         }
                         else{
                             star = Icons.Filled.StarBorder
                             Toast.makeText(current, "Unfavourite", Toast.LENGTH_SHORT).show()
+
+                                updateFavourite(id, false)
+
                         }
                     }) {
                         Icon(star, "Favourite", modifier = Modifier.size(32.dp))
@@ -380,6 +401,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun Main() {
         val recent_persons by dataBase.personDao().personsRecently().collectAsState(listOf())
+        val favourite_persons by dataBase.personDao().personsFavourite().collectAsState(listOf())
 
         Scaffold(
             bottomBar = {
@@ -398,7 +420,7 @@ class MainActivity : ComponentActivity() {
                 Column(modifier = Modifier
                     .padding(8.dp)
                 ) {
-                    Text(text = "Contacts", textAlign = TextAlign.Center, modifier = Modifier.weight(1F) .align(Alignment.CenterHorizontally) .padding(16.dp), style = MaterialTheme.typography.h4, color = MaterialTheme.colors.primary)
+                    Text(text = "Contacts", textAlign = TextAlign.Center, modifier = Modifier.weight(1F) .align(Alignment.CenterHorizontally) .padding(16.dp), style = MaterialTheme.typography.h4, color = MaterialTheme.colors.onPrimary)
                     Row(modifier = Modifier.weight(18F)) {
                         Column(modifier = Modifier.weight(50F)) {
                             Row(modifier = Modifier) {
@@ -430,12 +452,12 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxSize()
                                     .padding(8.dp)
                             ) {
-                                items(recent_persons.count()) { index ->
+                                items(favourite_persons.count()) { index ->
                                     ChatItem(
-                                        name = recent_persons[index].name,
-                                        num = recent_persons[index].num,
+                                        name = favourite_persons[index].name,
+                                        num = favourite_persons[index].num,
                                         onClick = {
-                                            navController.navigate("Chat/${recent_persons[index].id}")
+                                            navController.navigate("Chat/${favourite_persons[index].id}")
                                         })
                                 }
                             }

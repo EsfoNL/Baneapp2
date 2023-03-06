@@ -18,7 +18,10 @@ data class Person(
     val name: String,
     val num: String,
     val image: String,
+    val favourite: Boolean,
     val lastAccess: Instant = Instant.now()
+
+
 )
 
 @Dao
@@ -37,6 +40,12 @@ interface PersonDao {
 
     @Query("update person set lastAccess = :time where id = :id")
     suspend fun accessed(id: String, time: Instant = Instant.now())
+
+    @Query("select * from person where favourite = true order by name asc")
+    fun personsFavourite() : Flow<List<Person>>
+
+    @Query("update person set favourite = :newFavourite where id = :id")
+    fun favourite(id: String, newFavourite: Boolean)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(vararg persons: Person)
