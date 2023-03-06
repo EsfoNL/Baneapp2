@@ -56,6 +56,12 @@ import java.time.ZoneOffset
 class MainActivity : ComponentActivity() {
 
 
+    var tries = 0
+    companion object {
+        const val MAX_TRIES = 100
+    }
+
+
     val okHttpClient = OkHttpClient()
     var websocket: WebSocket? = null
     lateinit var dataBase: DataBase
@@ -124,6 +130,8 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun Settings() {
+
+
         val default = darkColors()
         var tekstkleurtekstcheck: String
         tekstkleurtekstcheck = "#" + String.format("%06X", settings.value.text_color.value.toArgb()).takeLast(6)
@@ -386,22 +394,25 @@ class MainActivity : ComponentActivity() {
     fun sendAndStoreMessage(message: String, id: String) {
         try {
             websocket?.send(
-                JSONObject().put("type", "Message").put("message", message).put("receiver", id)
+                JSONObject().put("type", "Message").put("message", message).put("receiver", id.toLong())
                     .toString()
             )
         } catch (e: Throwable) {
+            Log.e("sendAndStoreMessage", e.toString())
             return Unit
         }
         MainScope().launch {
-            dataBase.messageDao().insert(Message(settings.value.id, true, message));
+            dataBase.messageDao().insert(Message(id, true, message));
         }
     }
 
     fun connectWebSocket(): Boolean {
         val token = settings.value.token
         return if (token != null) {
+            val req = Request.Builder().addHeader("id", settings.value.id).addHeader("token", token).url("wss://esfokk.nl/api/v0/ws").build()
+            Log.d("Websocket request", req.toString())
             websocket = okHttpClient.newWebSocket(
-                request = Request.Builder().addHeader("Id", settings.value.id).addHeader("Token", token).url("wss://esfokk.nl/api/v0/ws").build(),
+                request = req,
                 listener = WsListener()
             )
             true
@@ -500,11 +511,10 @@ class MainActivity : ComponentActivity() {
                         .url("https://esfokk.nl/api/v0/login")
                         .build()
                 ).execute().body?.string() ?: "{}"
-                Log.e("Login", body)
                 val json = JSONObject(
                     body
                 )
-                Log.e("Login", json.toString())
+                Log.d("Login", json.toString())
                 settings.value.apply {
                     token = json.getString("token")
                     name = json.getString("name")
@@ -611,22 +621,38 @@ class MainActivity : ComponentActivity() {
 
     inner class WsListener : WebSocketListener() {
 
+
+
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
             super.onClosed(webSocket, code, reason)
-            if (!connectWebSocket()) {
-                Log.e("Websocket onClosed", reason.toString())
-            }
-
+            connectWebSocket()
+            Log.d("Websocket onClosed", reason.toString())
         }
 
         override fun onOpen(webSocket: WebSocket, response: Response) {
             super.onOpen(webSocket, response)
-            Log.e("Websocket onOpen", response.toString())
+            Log.d("Websocket onOpen", response.toString())
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             super.onFailure(webSocket, t, response)
-            Log.e("Websocket onFailure", t.toString() + ' ' + response?.body.toString())
+            when (response?.code) {
+                410 -> {
+                    MainScope().launch(Dispatchers.IO) {
+                        refresh_tokens()
+                        connectWebSocket()
+                    }
+                }
+                401 -> {
+                    settings.value.token = null
+                    settings.value.refresh_token = null
+                    navController.navigate("Login")
+                }
+                else -> {
+                    connectWebSocket()
+                    Log.d("Websocket onFailure", t.toString())
+                }
+            }
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
@@ -639,13 +665,30 @@ class MainActivity : ComponentActivity() {
                         self = false,
                         message = json.getString("message")
                     )
-                    Log.e("Websocket onMessage", message.toString())
+                    Log.d("Websocket onMessage", message.toString())
                     dataBase.messageDao().insert(
                         message
                     )
                 } catch (e: Throwable) {
                     Log.e("Websocket onMessage", e.toString())
                 }
+            }
+        }
+    }
+
+    private suspend fun refresh_tokens() {
+        val res = okHttpClient.newCall(Request.Builder().url("https://esfokk.nl/api/v0/refresh").header("refresh_token", settings.value.refresh_token.orEmpty()).header("id", settings.value.id).build()).execute()
+        if (res.code == 401 || res.code == 410) {
+            settings.value.apply {
+                token = null
+                refresh_token = null
+                navController.navigate("Login")
+            }
+        } else if (res.code == 200) {
+            val json = JSONObject(res.body!!.string())
+            settings.value.apply {
+                token = json.getString("token")
+                refresh_token = json.getString("refresh token")
             }
         }
     }
