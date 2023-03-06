@@ -7,6 +7,7 @@ import android.content.*
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -17,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardActionScope
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.*
+import androidx.compose.material.MaterialTheme.colors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
@@ -25,13 +27,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.*
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationChannelCompat
@@ -182,17 +187,18 @@ class MainActivity : ComponentActivity() {
                     .padding(it)
             ) {
                 Row(modifier = Modifier) {
-                    Text(text = "Tekstkleur:")
-                    SingleLineInput(tekstkleurtekst, { tekstkleurtekst = it })
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text(text = "Tekstkleur:", modifier = Modifier.padding(vertical = 16.dp), style = MaterialTheme.typography.body1)
+                        Text(text = "Voorgrondkleur:", modifier = Modifier.padding(vertical = 16.dp), style = MaterialTheme.typography.body1)
+                        Text(text = "Achtergrondkleur: ", modifier = Modifier.padding(vertical = 16.dp), style = MaterialTheme.typography.body1)
+                    }
+                    Column(modifier = Modifier) {
+                        SingleLineInput(voorgrondkleurtekst, { voorgrondkleurtekst = it }, label = "Tekstkleur")
+                        SingleLineInput(tekstkleurtekst, { tekstkleurtekst = it }, label = "Voorgrondkleur")
+                        SingleLineInput(achtergrondkleurtekst, { achtergrondkleurtekst = it }, label = "Achtergrondkleur")
+                    }
                 }
-                Row(modifier = Modifier) {
-                    Text(text = "Voorgrondkleur:")
-                    SingleLineInput(voorgrondkleurtekst, { voorgrondkleurtekst = it })
-                }
-                Row(modifier = Modifier) {
-                    Text(text = "Achtergrondkleur: ")
-                    SingleLineInput(achtergrondkleurtekst, { achtergrondkleurtekst = it })
-                }
+
                 Button(
                     onClick = {
                         tekstkleurtekst = "#A7A7A7"
@@ -296,8 +302,8 @@ class MainActivity : ComponentActivity() {
             .background(Color(0xFF373737))
             .padding(8.dp)
         val messageList by dataBase.messageDao().messagesById(id).collectAsState(listOf())
-
-
+        var star by remember { mutableStateOf(Icons.Filled.StarBorder) }
+        val current = LocalContext.current
 
         Scaffold(topBar = {
             TopAppBar(
@@ -310,7 +316,22 @@ class MainActivity : ComponentActivity() {
                 },
                 title = {
                     Text(text = contact?.name.orEmpty())
-                })
+                },
+                actions = {
+                    IconButton(onClick = {
+                        if(star == Icons.Filled.StarBorder) {
+                            star = Icons.Filled.Star
+                            Toast.makeText(current, "Favourite", Toast.LENGTH_SHORT).show()
+                        }
+                        else{
+                            star = Icons.Filled.StarBorder
+                            Toast.makeText(current, "Unfavourite", Toast.LENGTH_SHORT).show()
+                        }
+                    }) {
+                        Icon(star, "Favourite", modifier = Modifier.size(32.dp))
+                    }
+                }
+            )
         }) {
             Column(modifier = Modifier
                 .fillMaxSize()
@@ -330,7 +351,7 @@ class MainActivity : ComponentActivity() {
                         val tijddatum =
                             LocalDateTime.ofInstant(messageList[Message].time, ZoneOffset.UTC)
                         val tijd =
-                            tijddatum.getHour().toString() + ":" + tijddatum.getMinute().toString()
+                            (tijddatum.getHour()+1).toString() + ":" + tijddatum.getMinute().toString()
                         MessageCard(messageList[Message].message, naam, pfp, tijd)
                     }
                 }
@@ -365,29 +386,63 @@ class MainActivity : ComponentActivity() {
                 BottomNavigation() {
                     IconButton(onClick = {
                         navController.navigate("AddPerson")
-                    }) { Icon(Icons.Filled.Add, "Settings") }
-                    Text(settings.value.name + "#" + settings.value.num)
+                    }) { Icon(Icons.Filled.Add, "Settings", modifier = Modifier.align(Alignment.CenterVertically) .size(32.dp)) }
+                    Text(settings.value.name + "#" + settings.value.num, modifier = Modifier.align(Alignment.CenterVertically), style = MaterialTheme.typography.h5)
                     IconButton(onClick = {
                         navController.navigate("Settings")
-                    }) { Icon(Icons.Filled.Settings, "Settings") }
+                    }) { Icon(Icons.Filled.Settings, "Settings", modifier = Modifier.align(Alignment.CenterVertically) .size(32.dp)) }
                 }
             }
         ) {
             Row(modifier = Modifier.padding(it)) {
-
-
-                LazyColumn(modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp)) {
-                    items(recent_persons.count()) { index ->
-                        ChatItem(
-                            name = recent_persons[index].name,
-                            num = recent_persons[index].num,
-                            onClick = {
-                                navController.navigate("Chat/${recent_persons[index].id}")
-                            })
+                Column(modifier = Modifier
+                    .padding(8.dp)
+                ) {
+                    Text(text = "Contacts", textAlign = TextAlign.Center, modifier = Modifier.weight(1F) .align(Alignment.CenterHorizontally) .padding(16.dp), style = MaterialTheme.typography.h4, color = MaterialTheme.colors.primary)
+                    Row(modifier = Modifier.weight(18F)) {
+                        Column(modifier = Modifier.weight(50F)) {
+                            Row(modifier = Modifier) {
+                                Icon(Icons.Filled.AccessTime, "Recent", modifier = Modifier.align(Alignment.CenterVertically) .size(48.dp))
+                                Text(text = "Recent", style = MaterialTheme.typography.h5, modifier = Modifier.align(Alignment.CenterVertically))
+                            }
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp)
+                            ) {
+                                items(recent_persons.count()) { index ->
+                                    ChatItem(
+                                        name = recent_persons[index].name,
+                                        num = recent_persons[index].num,
+                                        onClick = {
+                                            navController.navigate("Chat/${recent_persons[index].id}")
+                                        })
+                                }
+                            }
+                        }
+                        Column(modifier = Modifier.weight(50F)) {
+                            Row(modifier = Modifier) {
+                                Icon(Icons.Filled.StarBorder, "Recent",modifier = Modifier.align(Alignment.CenterVertically) .size(48.dp))
+                                Text(text = "Favourite", style = MaterialTheme.typography.h5, modifier = Modifier.align(Alignment.CenterVertically))
+                            }
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp)
+                            ) {
+                                items(recent_persons.count()) { index ->
+                                    ChatItem(
+                                        name = recent_persons[index].name,
+                                        num = recent_persons[index].num,
+                                        onClick = {
+                                            navController.navigate("Chat/${recent_persons[index].id}")
+                                        })
+                                }
+                            }
+                        }
                     }
                 }
+
             }
         }
     }
@@ -773,8 +828,8 @@ fun PasswordField(
 @Composable
 fun ChatItem(icon: Painter = painterResource(R.drawable.bane_logo), name: String = "No Name", num: String = "0000", onClick: () -> Unit = {}) {
     Card(onClick = onClick) {
-        Row(modifier = Modifier.padding(8.dp)) {
-            Image(icon, name, modifier = Modifier.height(30.dp))
+        Row(modifier = Modifier.padding(4.dp) .fillMaxWidth()) {
+            Image(icon, name, modifier = Modifier.height(48.dp))
             Text(text = name)
             Text(text = "#$num", color = MaterialTheme.colors.primaryVariant)
         }
@@ -784,14 +839,14 @@ fun ChatItem(icon: Painter = painterResource(R.drawable.bane_logo), name: String
 fun MessageCard(message: String, name: String,  pfp: Painter , tijd: String) {
     Card(
         modifier = Modifier
-            .padding(10.dp)
+            .padding(1.dp)
             .fillMaxWidth()
             .wrapContentHeight(),
         shape = MaterialTheme.shapes.medium,
         elevation = 5.dp,
         backgroundColor = Color(0xFF373737)
     ) {
-        Column(Modifier.padding(4.dp)) {
+        Column(Modifier.padding(2.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -799,8 +854,8 @@ fun MessageCard(message: String, name: String,  pfp: Painter , tijd: String) {
                     pfp,
                     contentDescription = null,
                     modifier = Modifier
-                        .size(30.dp)
-                        .padding(4.dp),
+                        .size(48.dp)
+                        .padding(0.dp),
                     contentScale = ContentScale.Fit,
                 )
                 Row(Modifier.padding(8.dp)) {
@@ -813,7 +868,6 @@ fun MessageCard(message: String, name: String,  pfp: Painter , tijd: String) {
                         Text(
                             text = tijd,
                             style = MaterialTheme.typography.body2,
-
                             )
 
                 }
@@ -822,7 +876,7 @@ fun MessageCard(message: String, name: String,  pfp: Painter , tijd: String) {
             Text(
                 text = message,
                 style = MaterialTheme.typography.body1,
-                modifier = Modifier.padding(4.dp)
+                modifier = Modifier.padding(horizontal = 8.dp)
             )
         }
     }
