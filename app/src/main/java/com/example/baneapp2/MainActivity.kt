@@ -1,7 +1,11 @@
 package com.example.baneapp2
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.*
 import android.os.Bundle
-import android.util.JsonReader
+import android.os.IBinder
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -22,15 +26,17 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.*
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationChannelCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.graphics.toColorInt
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -38,22 +44,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.room.Room
-import com.example.baneapp2.settingstore.StoreUserSettings
+import com.example.baneapp2.settings.Settings
 import com.example.baneapp2.ui.theme.Baneapp2Theme
 import kotlinx.coroutines.*
 import okhttp3.*
-import okio.ByteString
 import org.json.JSONObject
-import java.nio.charset.Charset
 import java.util.*
-import java.sql.Time
-import java.sql.Timestamp
-import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
-import java.util.Calendar
-import java.util.Random
-import kotlin.coroutines.coroutineContext
 
 class MainActivity : ComponentActivity() {
 
@@ -61,26 +59,25 @@ class MainActivity : ComponentActivity() {
     val okHttpClient = OkHttpClient()
     var websocket: WebSocket? = null
     lateinit var dataBase: DataBase
-    lateinit var user: MutableState<User>
+    lateinit var settings: MutableState<Settings>
     lateinit var navController: NavHostController
+    lateinit var sharedPreferences: SharedPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dataBase = Room.databaseBuilder(applicationContext, DataBase::class.java, "db").addTypeConverter(Convert()).build()
-
+        sharedPreferences = getPreferences(MODE_PRIVATE)
+        settings = mutableStateOf(Settings(sharedPreferences))
         setContent {
-
-            user = remember { mutableStateOf(User(getSharedPreferences("User", MODE_PRIVATE))) }
-            Log.e("onCreate", user.value.toString())
             navController = rememberNavController()
-            Baneapp2Theme(colors = darkColors()) {
+            Baneapp2Theme(settings.value) {
                 // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background
                 ) {
                     NavHost(
                         navController = navController,
-                        startDestination = if (user.value.token != null) "Main" else "Login"
+                        startDestination = if (settings.value.token != null) "Main" else "Login"
                     ) {
                         composable("Login") { Login() }
                         composable("Register") { Register() }
@@ -114,35 +111,37 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        user.value.save(getSharedPreferences("User", MODE_PRIVATE));
+        settings.value.save(sharedPreferences);
+    }
+
+    override fun onStop() {
+        super.onStop()
+    }
+
+    override fun onResume() {
+        super.onResume()
     }
 
     @Composable
-    fun Settings(){
-        var tekstkleurtekst by remember{mutableStateOf("A7A7A7")}
-        var achtergrondkleurtekst by remember{mutableStateOf("373737")}
-        var voorgrondkleurtekst by remember{mutableStateOf("272727")}
-        val context = LocalContext.current
-        val scope = rememberCoroutineScope()
-        val dataStore = StoreUserSettings(context)
-        val tekstkleur = dataStore.getTextColor.collectAsState(initial = "")
-        val achtergrondkleur = dataStore.getBGColor.collectAsState(initial = "")
-        val voorgrondkleur = dataStore.getFGColor.collectAsState(initial = "")
-        if(tekstkleur.toString() != "") {
-            tekstkleurtekst = tekstkleur.toString()
-            achtergrondkleurtekst = achtergrondkleur.toString()
-            voorgrondkleurtekst = voorgrondkleur.toString()
-        }
-        var tekstkleurkleur: String = "0xFF" + tekstkleurtekst
-        var achtergrondkleurkleur: String = "0xFF"+ achtergrondkleurtekst
-        var vooorgrondkleurkleur: String = "0xFF" + voorgrondkleurtekst
+    fun Settings() {
+        val default = darkColors()
+        var tekstkleurtekstcheck: String
+        tekstkleurtekstcheck = "#" + String.format("%06X", settings.value.text_color.value.toArgb()).takeLast(6)
+
+        var bgkleurtekstcheck: String
+        bgkleurtekstcheck =
+            "#" + String.format("%06X", settings.value.bg_color.value.toArgb()).takeLast(6)
+        var fgkleurtekstcheck: String
+        fgkleurtekstcheck = "#" + String.format("%06X", settings.value.fg_color.value.toArgb()).takeLast(6)
 
 
-
+        var tekstkleurtekst by remember { mutableStateOf(tekstkleurtekstcheck) }
+        var achtergrondkleurtekst by remember { mutableStateOf(bgkleurtekstcheck) }
+        var voorgrondkleurtekst by remember { mutableStateOf(fgkleurtekstcheck) }
+        var error by remember { mutableStateOf(false) }
 
         Scaffold(topBar = {
             TopAppBar(
-                backgroundColor=Color(vooorgrondkleurkleur.toInt()),
                 navigationIcon = {
                     IconButton(onClick = {
                         navController.navigateUp()
@@ -151,42 +150,61 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 title = {
-                    Text(text = "Instellingen", color = Color(tekstkleurkleur.toInt()))
+                    Text(text = "Instellingen")
                 },
                 actions = {
                     IconButton(onClick = {
-                        scope.launch {
-                            dataStore.saveBGColor(achtergrondkleurtekst)
-                            dataStore.saveFGColor(voorgrondkleurtekst)
-                            dataStore.saveTextColor(tekstkleurtekst)
-
+                        try {
+                            settings.value.bg_color.value = Color(achtergrondkleurtekst.toColorInt())
+                            settings.value.fg_color.value = Color(voorgrondkleurtekst.toColorInt())
+                            settings.value.text_color.value = Color(tekstkleurtekst.toColorInt())
+                            error = false
+                        } catch (e: Throwable) {
+                            error = true
                         }
-
                     }) {
                         Icon(Icons.Filled.Save, "Save Changes")
                     }
                 }
             )
         }) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(achtergrondkleurkleur.toInt()))
-                        .padding(it)
-                ) {
-                    Row(modifier = Modifier) {
-                        Text(text = "Tekstkleur:", color = Color(tekstkleurkleur.toInt()))
-                        SingleLineInput(tekstkleurtekst, {tekstkleurtekst = it})
-                    }
-                    Row(modifier = Modifier) {
-                        Text(text = "Voorgrondkleur:", color = Color(tekstkleurkleur.toInt()))
-                        SingleLineInput(voorgrondkleurtekst, {voorgrondkleurtekst = it})
-                    }
-                    Row(modifier = Modifier) {
-                        Text(text = "Achtergrondkleur: ", color = Color(tekstkleurkleur.toInt()))
-                        SingleLineInput(achtergrondkleurtekst, {achtergrondkleurtekst = it})
-                    }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(it)
+            ) {
+                Row(modifier = Modifier) {
+                    Text(text = "Tekstkleur:")
+                    SingleLineInput(tekstkleurtekst, { tekstkleurtekst = it })
                 }
+                Row(modifier = Modifier) {
+                    Text(text = "Voorgrondkleur:")
+                    SingleLineInput(voorgrondkleurtekst, { voorgrondkleurtekst = it })
+                }
+                Row(modifier = Modifier) {
+                    Text(text = "Achtergrondkleur: ")
+                    SingleLineInput(achtergrondkleurtekst, { achtergrondkleurtekst = it })
+                }
+                Button(
+                    onClick = {
+                        tekstkleurtekst = "#A7A7A7"
+                        achtergrondkleurtekst = "#373737"
+                        voorgrondkleurtekst = "#171717"
+                    },
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .size(
+                            width = TextFieldDefaults.MinWidth,
+                            height = TextFieldDefaults.MinHeight
+                        )
+                        .padding(4.dp)
+                ){
+                    Text("Change back to defaults", style = MaterialTheme.typography.body1)
+                }
+                if (error) {
+                    Text(text = "Error occured", color = MaterialTheme.colors.error)
+                }
+            }
 
 
         }
@@ -205,22 +223,24 @@ class MainActivity : ComponentActivity() {
                         Icon(Icons.Filled.ArrowBack, "Back to Main")
                     }
                 }
-                )
+            )
         }) {
 
-            Box(modifier = Modifier
-                .padding(it)
-                .fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .padding(it)
+                    .fillMaxSize()
+            ) {
                 SingleLineInput(
                     value = name,
                     modifier = Modifier.align(Alignment.Center),
-                    onValueChange = {name = it},
+                    onValueChange = { name = it },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
                         MainScope().launch(Dispatchers.IO) {
                             val id = addPerson(name)
                             Log.e("AddPerson", id.toString())
-                            if (id != null){
+                            if (id != null) {
                                 withContext(Dispatchers.Main) {
                                     navController.navigate("Chat/$id")
                                 }
@@ -255,7 +275,6 @@ class MainActivity : ComponentActivity() {
             return null
         }
     }
-
 
     @Composable
     fun Chat(id: String) {
@@ -295,7 +314,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     items(messageList.count()) { Message ->
                         val (pfp, naam) = if (messageList[Message].self) {
-                            Pair(painterResource(R.drawable.subpicture), user.value.name)
+                            Pair(painterResource(R.drawable.subpicture), settings.value.name)
                         } else {
                             Pair(painterResource(R.drawable.subpictureother), contact?.name.orEmpty())
                         }
@@ -333,14 +352,17 @@ class MainActivity : ComponentActivity() {
         val recent_persons by dataBase.personDao().personsRecently().collectAsState(listOf())
 
         Scaffold(
-            bottomBar = { BottomNavigation() {
-                IconButton(onClick = {
-                    navController.navigate("AddPerson")
-                }) { Icon(Icons.Filled.Add, "Settings") }
-                IconButton(onClick = {
-                    navController.navigate("Settings")
-                }) { Icon(Icons.Filled.Settings, "Settings") }
-            } }
+            bottomBar = {
+                BottomNavigation() {
+                    IconButton(onClick = {
+                        navController.navigate("AddPerson")
+                    }) { Icon(Icons.Filled.Add, "Settings") }
+                    Text(settings.value.name + "#" + settings.value.num)
+                    IconButton(onClick = {
+                        navController.navigate("Settings")
+                    }) { Icon(Icons.Filled.Settings, "Settings") }
+                }
+            }
         ) {
             Row(modifier = Modifier.padding(it)) {
 
@@ -371,15 +393,15 @@ class MainActivity : ComponentActivity() {
             return Unit
         }
         MainScope().launch {
-            dataBase.messageDao().insert(Message(user.value.id, true, message));
+            dataBase.messageDao().insert(Message(settings.value.id, true, message));
         }
     }
 
     fun connectWebSocket(): Boolean {
-        val token = user.value.token
+        val token = settings.value.token
         return if (token != null) {
             websocket = okHttpClient.newWebSocket(
-                request = Request.Builder().addHeader("Id", user.value.id).addHeader("Token", token).url("wss://esfokk.nl/api/v0/ws").build(),
+                request = Request.Builder().addHeader("Id", settings.value.id).addHeader("Token", token).url("wss://esfokk.nl/api/v0/ws").build(),
                 listener = WsListener()
             )
             true
@@ -469,11 +491,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    fun login(email: String, password: String): Boolean {
+    fun login(fun_email: String, password: String): Boolean {
             try {
                 val body = okHttpClient.newCall(
                     Request.Builder().get()
-                        .addHeader("email", email)
+                        .addHeader("email", fun_email)
                         .addHeader("password", password)
                         .url("https://esfokk.nl/api/v0/login")
                         .build()
@@ -483,14 +505,14 @@ class MainActivity : ComponentActivity() {
                     body
                 )
                 Log.e("Login", json.toString())
-                user.value = User(
-                    json.getString("token"),
-                    json.getString("name"),
-                    json.getString("num"),
-                    json.getString("id"),
-                    email,
+                settings.value.apply {
+                    token = json.getString("token")
+                    name = json.getString("name")
+                    num = json.getString("num")
+                    id = json.getString("id")
+                    email = fun_email
                     json.getString("refresh_token")
-                );
+                };
             } catch (e: Throwable) {
                 Log.e("Login", e.toString())
                 return false
@@ -551,7 +573,7 @@ class MainActivity : ComponentActivity() {
                     { password = it },
                     modifier = Modifier.align(Alignment.CenterHorizontally),
 
-                )
+                    )
 
                 Button(
                     onClick = {
@@ -563,7 +585,8 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
-                        }},
+                        }
+                    },
                     content = { Text("Register", style = MaterialTheme.typography.h5) },
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
@@ -576,7 +599,10 @@ class MainActivity : ComponentActivity() {
 
     fun register(name: String, email: String, password: String): Boolean {
         return try {
-            okHttpClient.newCall(Request.Builder().url("https://esfokk.nl/api/v0/register").header("name", name).header("email", email).header("password", password).build()).execute().isSuccessful
+            okHttpClient.newCall(
+                Request.Builder().url("https://esfokk.nl/api/v0/register").header("name", name)
+                    .header("email", email).header("password", password).build()
+            ).execute().isSuccessful
         } catch (e: Throwable) {
             false
         }
@@ -624,7 +650,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
 
 @Composable
 fun SingleLineInput(
@@ -679,21 +704,21 @@ fun PasswordField(
     )
 }
 
-@Preview
-@Composable
-fun ChatItemPreview() {
-    var messagelijsttest = mutableListOf<Message> (Message("hello", true, "woef", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()))
-    //var testuserinfo = mutableStateOf<>(useri)
-
-    Baneapp2Theme {
-        //MessageCard("Dit is een testbericht OwO", "Username", painterResource(R.drawable.subpicture), "4:23")
-        //chatu(messagelijsttest)
-        Chattest(messagelijsttest)
-    }
-
-
-
-}
+//@Preview
+//@Composable
+//fun ChatItemPreview() {
+//    var messagelijsttest = mutableListOf<Message> (Message("hello", true, "woef", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()), Message("boyy", false, "barf", Calendar.getInstance().toInstant()))
+//    //var testuserinfo = mutableStateOf<>(useri)
+//
+//    Baneapp2Theme {
+//        //MessageCard("Dit is een testbericht OwO", "Username", painterResource(R.drawable.subpicture), "4:23")
+//        //chatu(messagelijsttest)
+//        Chattest(messagelijsttest)
+//    }
+//
+//
+//
+//}
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
