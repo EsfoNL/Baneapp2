@@ -242,6 +242,7 @@ class MainActivity : ComponentActivity() {
                 SingleLineInput(
                     value = name,
                     modifier = Modifier.align(Alignment.Center),
+                    label = "<name>#<num>",
                     onValueChange = { name = it },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
@@ -646,7 +647,9 @@ class MainActivity : ComponentActivity() {
                 401 -> {
                     settings.value.token = null
                     settings.value.refresh_token = null
-                    navController.navigate("Login")
+                    MainScope().launch(Dispatchers.Main) {
+                        navController.navigate("Login")
+                    }
                 }
                 else -> {
                     connectWebSocket()
@@ -678,11 +681,14 @@ class MainActivity : ComponentActivity() {
 
     private suspend fun refresh_tokens() {
         val res = okHttpClient.newCall(Request.Builder().url("https://esfokk.nl/api/v0/refresh").header("refresh_token", settings.value.refresh_token.orEmpty()).header("id", settings.value.id).build()).execute()
+        Log.d("refresh_tokens", res.toString())
         if (res.code == 401 || res.code == 410) {
             settings.value.apply {
                 token = null
                 refresh_token = null
-                navController.navigate("Login")
+                withContext(Dispatchers.Main) {
+                    navController.navigate("Login")
+                }
             }
         } else if (res.code == 200) {
             val json = JSONObject(res.body!!.string())
